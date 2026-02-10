@@ -42,8 +42,9 @@ func NewLogger(logger zerolog.Logger) *Logger {
 }
 
 func (t *Logger) WithPrefix(prefix string) *Logger {
-	t.prefix = prefix
-	return t
+	n := NewLogger(t.logger)
+	n.prefix = prefix
+	return n
 }
 
 func (t *Logger) Prefix() string {
