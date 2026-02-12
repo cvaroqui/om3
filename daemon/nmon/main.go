@@ -782,12 +782,16 @@ func (t *Manager) loadConfig() error {
 }
 
 func (t *Manager) loadConfigAndPublish() error {
+	prevNodeConfig := t.nodeConfig
+
 	if err := t.loadConfig(); err != nil {
 		return err
 	}
 
-	node.ConfigData.Set(t.localhost, t.nodeConfig.DeepCopy())
-	t.publisher.Pub(&msgbus.NodeConfigUpdated{Node: t.localhost, Value: t.nodeConfig}, t.labelLocalhost)
+	if prevNodeConfig != t.nodeConfig {
+		node.ConfigData.Set(t.localhost, t.nodeConfig.DeepCopy())
+		t.publisher.Pub(&msgbus.NodeConfigUpdated{Node: t.localhost, Value: t.nodeConfig}, t.labelLocalhost)
+	}
 
 	if stats := node.StatsData.GetByNode(t.localhost); stats != nil && stats.MemTotalMB != 0 {
 		t.updateIsOverloaded(*stats)
