@@ -39,9 +39,7 @@ type (
 	}
 
 	CollectorProblem struct {
-		Detail string `json:"detail"`
-		Title  string `json:"title"`
-		Status int    `json:"status"`
+		text string `json:"text"`
 	}
 )
 
@@ -64,8 +62,8 @@ func CollectorResponseStatusCheck(resp *http.Response, method, path string, want
 		return fmt.Errorf("unexpected response status code for %s %s: wanted %v got %d",
 			method, path, wanted, resp.StatusCode)
 	}
-	return fmt.Errorf("unexpected response status code for %s %s: wanted %v got %d %s: %s",
-		method, path, wanted, resp.StatusCode, data.Title, data.Detail)
+	return fmt.Errorf("%s %s: [%d]: %s",
+		method, path, resp.StatusCode, data.text)
 }
 
 func (t *Node) CollectorRawConfig() *CollectorConfigRaw {
