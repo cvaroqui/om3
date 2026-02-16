@@ -41,6 +41,12 @@ func NewLogger(logger zerolog.Logger) *Logger {
 	}
 }
 
+func (t *Logger) AddPrefix(prefix string) *Logger {
+	n := NewLogger(t.logger)
+	n.prefix = t.prefix + prefix
+	return n
+}
+
 func (t *Logger) WithPrefix(prefix string) *Logger {
 	n := NewLogger(t.logger)
 	n.prefix = prefix
