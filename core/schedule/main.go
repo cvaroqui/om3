@@ -1,6 +1,7 @@
 package schedule
 
 import (
+	"strings"
 	"time"
 
 	"github.com/opensvc/om3/v3/core/naming"
@@ -127,6 +128,25 @@ func (t Table) DeepCopy() *Table {
 func (t Entry) GetNext() (time.Time, time.Duration, error) {
 	sc := usched.New(t.Schedule)
 	return sc.Next(usched.NextWithLast(t.LastRunAt))
+}
+
+func (t Entry) LogPrefix() string {
+	var s strings.Builder
+
+	if t.Path.IsZero() {
+		s.WriteString("node: ")
+	} else {
+		s.WriteString(t.Path.String())
+		s.WriteString(": ")
+	}
+
+	if rid := t.RID(); rid != "DEFAULT" {
+		s.WriteString(rid)
+		s.WriteString(": ")
+	}
+	s.WriteString(t.Action)
+	s.WriteString(": ")
+	return s.String()
 }
 
 func (t Entry) RID() string {
