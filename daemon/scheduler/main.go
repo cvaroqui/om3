@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/labstack/gommon/log"
-
 	"github.com/opensvc/om3/v3/core/driver"
 	"github.com/opensvc/om3/v3/core/instance"
 	"github.com/opensvc/om3/v3/core/kwoption"
@@ -43,8 +41,8 @@ type (
 		databus   *daemondata.T
 		publisher pubsub.Publisher
 
-		events              chan any
 		jobs                Jobs
+		events              chan any
 		enabled             bool
 		provisioned         map[naming.Path]bool
 		failover            map[naming.Path]bool
@@ -73,18 +71,22 @@ type (
 		//
 		// This map is updated from the InstanceStatusUpdated events
 		// received via ObjectStatusUpdated.SrcEv for the local node.
-		reqSatisfied boolMap
+		reqSatisfied errMap
 	}
 
 	Schedules map[naming.Path]map[string]schedule.Entry
 
-	Jobs map[string]Job
-	Job  struct {
+	// Job is a schedule entries with alarms set.
+	Job struct {
 		CreatedAt time.Time
 		LastRunAt time.Time
 		schedule  schedule.Entry
 		cancel    []func()
 	}
+
+	// Jobs is a map of Job
+	Jobs map[string]Job
+
 	eventJobAlarm struct {
 		schedule schedule.Entry
 	}
@@ -92,13 +94,9 @@ type (
 		schedule schedule.Entry
 		end      time.Time
 	}
-	eventJobRun struct {
-		schedule schedule.Entry
-		begin    time.Time
-	}
 
 	timeMap map[string]time.Time
-	boolMap map[string]bool
+	errMap  map[string]error
 )
 
 var (
@@ -111,7 +109,7 @@ var (
 	}
 )
 
-func (t Schedules) DelByPath(path naming.Path) {
+func (t Schedules) Del(path naming.Path) {
 	delete(t, path)
 }
 
@@ -154,7 +152,7 @@ func New(subQS pubsub.QueueSizer, opts ...funcopt.O) *T {
 		provisioned:       make(map[naming.Path]bool),
 		subQS:             subQS,
 		lastRunOnAllPeers: make(timeMap),
-		reqSatisfied:      make(boolMap),
+		reqSatisfied:      make(errMap),
 
 		status: daemonsubsystem.Scheduler{
 			Status:     daemonsubsystem.Status{CreatedAt: time.Now(), ID: "scheduler"},
@@ -170,6 +168,16 @@ func New(subQS pubsub.QueueSizer, opts ...funcopt.O) *T {
 
 func newJobId(e schedule.Entry) string {
 	return fmt.Sprintf("%s:%s", e.Path, e.Key)
+}
+
+func (t Jobs) PathIds(path naming.Path) []string {
+	var l []string
+	for id, job := range t {
+		if job.schedule.Path == path {
+			l = append(l, id)
+		}
+	}
+	return l
 }
 
 func (t Jobs) Table(path naming.Path) schedule.Table {
@@ -217,14 +225,18 @@ func (t Jobs) Done(e schedule.Entry) Job {
 	return job
 }
 
-func (t Jobs) Del(e schedule.Entry) {
-	jobId := newJobId(e)
+func (t Jobs) DelId(jobId string) {
 	job, ok := t[jobId]
 	if !ok {
 		return
 	}
 	job.Cancel()
 	delete(t, jobId)
+}
+
+func (t Jobs) Del(e schedule.Entry) {
+	jobId := newJobId(e)
+	t.DelId(jobId)
 }
 
 func (t Jobs) DelPath(p naming.Path) {
@@ -293,7 +305,7 @@ func (t *T) createJob(e schedule.Entry) {
 		return
 	}
 	if e.Require != "" {
-		if isSatisfied, ok := t.reqSatisfied.Get(e.Path, e.Key); !ok || !isSatisfied {
+		if satisfied, ok := t.reqSatisfied.Get(e.Path, e.Key); !ok || satisfied != nil {
 			return
 		}
 	}
@@ -312,7 +324,7 @@ func (t *T) createJob(e schedule.Entry) {
 	now := time.Now() // keep before GetNext call
 	next, _, err := e.GetNext()
 	if err != nil {
-		logger.Attr("definition", e.Schedule).Warnf("failed to find a next date: %s", err)
+		logger.Warnf("failed to find a next date: %s", err)
 		t.jobs.Del(e)
 		return
 	}
@@ -335,20 +347,8 @@ func (t *T) createJob(e schedule.Entry) {
 }
 
 func (t *T) jobLogger(e schedule.Entry) *plog.Logger {
-	logger := naming.LogWithPath(t.log, e.Path).Attr("action", e.Action).Attr("key", e.Key)
-	var obj string
-	if e.Path.IsZero() {
-		obj = "node"
-	} else {
-		obj = e.Path.String()
-	}
-	var prefix string
-	if rid := e.RID(); rid != "DEFAULT" {
-		prefix = fmt.Sprintf("%s%s: %s: %s: ", t.log.Prefix(), obj, rid, e.Action)
-	} else {
-		prefix = fmt.Sprintf("%s%s: %s: ", t.log.Prefix(), obj, e.Action)
-	}
-	return logger.WithPrefix(prefix)
+	logger := naming.LogWithPath(t.log, e.Path)
+	return logger.AddPrefix(e.LogPrefix())
 }
 
 func (t *T) isFailover(path naming.Path) bool {
@@ -365,31 +365,31 @@ func (t *T) onJobAlarm(c eventJobAlarm) {
 	logger := t.jobLogger(c.schedule)
 	e, ok := t.schedules.Get(c.schedule.Path, c.schedule.Key)
 	if !ok {
-		logger.Infof("aborted, schedule is gone")
+		logger.Infof("abort (schedule deleted)")
 		return
 	}
 	if e.RequireCollector && !t.isCollectorJoinable {
-		logger.Infof("aborted, the collector is not joinable")
+		logger.Infof("abort (collector not joinable)")
 		return
 	}
 	if !e.Path.IsZero() {
 		if e.RequireProvisioned && !t.isProvisioned(e.Path) {
-			logger.Infof("%s: aborted, the object is no longer provisioned", e.RID())
+			logger.Infof("abort (no longer provisioned)")
 			return
 		}
-		if isSatisfied, ok := t.reqSatisfied.Get(e.Path, e.Key); ok {
-			if !isSatisfied {
-				log.Infof("%s: aborted, requirements no longer met", e.RID())
+		if satisfied, ok := t.reqSatisfied.Get(e.Path, e.Key); ok {
+			if satisfied != nil {
+				logger.Tracef("abort (requirements no longer met)")
 				return
 			}
 		} else if e.Require != "" {
-			log.Infof("%s: aborted, requirements not yet evaluated", e.RID())
+			logger.Infof("abort (requirements not yet evaluated)")
 			return
 		}
 	}
 
 	if tm := t.peerInstanceLastRun(e); c.schedule.LastRunAt.Before(tm) {
-		logger.Infof("aborted, job ran on peer at %s", tm)
+		logger.Infof("abort (job ran on peer at %s)", tm)
 		t.recreateJobFrom(e, tm)
 		return
 	}
@@ -404,26 +404,34 @@ func (t *T) onJobAlarm(c eventJobAlarm) {
 		logger.Warnf("%s", err)
 		return
 	} else if n >= e.MaxParallel {
-		logger.Infof("aborted, %d/%d jobs already running", n, e.MaxParallel)
+		logger.Infof("abort (%d/%d jobs already running)", n, e.MaxParallel)
 		return
 	}
+
+	// Update the by-node last run cache
+	t.lastRunOnAllPeers.Set(e.Path, e.Key, e.NextRunAt)
+
+	// Update the job last run date
+	jobId := newJobId(e)
+	job, ok := t.jobs[jobId]
+	if ok {
+		job.LastRunAt = c.schedule.NextRunAt
+		t.jobs[jobId] = job
+	}
+
 	go func() {
-		t.events <- eventJobRun{
-			schedule: e,
-			begin:    c.schedule.NextRunAt,
-		}
 		if err := t.action(e); err != nil {
-			logger.Errorf("on exec %s: %s", e.Key, err)
+			logger.Errorf("on exec: %s", err)
 		} else {
 			// remember last success, for users benefit
 			if err := e.SetLastSuccess(c.schedule.NextRunAt); err != nil {
-				logger.Errorf("on update last success %s: %s", e.Key, err)
+				logger.Errorf("on update last success: %s", err)
 			}
 		}
 
 		// remember last run, to not run the job too soon after a daemon restart
 		if err := e.SetLastRun(c.schedule.NextRunAt); err != nil {
-			logger.Errorf("on update last run %s: %s", e.Key, err)
+			logger.Errorf("on update last run: %s", err)
 		}
 
 		t.events <- eventJobDone{
@@ -437,10 +445,9 @@ func (t *T) runningCount(e schedule.Entry) (int, error) {
 	if e.RunDir == "" {
 		return -1, nil
 	}
-	logger := t.jobLogger(e)
 	dir := runfiles.Dir{
 		Path: e.RunDir,
-		Log:  logger,
+		Log:  t.jobLogger(e),
 	}
 	n, err := dir.Count()
 	if err != nil {
@@ -474,7 +481,6 @@ func (t *T) Stop() error {
 func (t *T) startSubscriptions() *pubsub.Subscription {
 	sub := pubsub.SubFromContext(t.ctx, "daemon.scheduler", t.subQS)
 	labelLocalhost := pubsub.Label{"node", t.localhost}
-	sub.AddFilter(&msgbus.InstanceConfigUpdated{}, labelLocalhost)
 	sub.AddFilter(&msgbus.InstanceStatusDeleted{}, labelLocalhost)
 	sub.AddFilter(&msgbus.ObjectStatusDeleted{}, labelLocalhost)
 	sub.AddFilter(&msgbus.ObjectStatusUpdated{}, labelLocalhost)
@@ -520,8 +526,6 @@ func (t *T) loop() {
 		select {
 		case ev := <-sub.C:
 			switch c := ev.(type) {
-			case *msgbus.InstanceConfigUpdated:
-				t.onInstanceConfigUpdated(c)
 			case *msgbus.InstanceStatusDeleted:
 				t.onInstanceStatusDeleted(c)
 			case *msgbus.NodeMonitorUpdated:
@@ -541,8 +545,6 @@ func (t *T) loop() {
 				t.onJobAlarm(c)
 			case eventJobDone:
 				t.onJobDone(c)
-			case eventJobRun:
-				t.onJobRun(c)
 			default:
 				t.log.Errorf("received an unsupported event: %#v", c)
 			}
@@ -551,17 +553,6 @@ func (t *T) loop() {
 			return
 		}
 	}
-}
-
-func (t *T) onJobRun(c eventJobRun) {
-	t.lastRunOnAllPeers.Set(c.schedule.Path, c.schedule.Key, c.schedule.NextRunAt)
-	jobId := newJobId(c.schedule)
-	job, ok := t.jobs[jobId]
-	if !ok {
-		return
-	}
-	job.LastRunAt = c.begin
-	t.jobs[jobId] = job
 }
 
 func (t *T) onJobDone(c eventJobDone) {
@@ -581,7 +572,7 @@ func (t *T) recreateJobFrom(prev schedule.Entry, lastRunAt time.Time) {
 }
 
 func (t *T) onInstanceStatusDeleted(c *msgbus.InstanceStatusDeleted) {
-	t.loggerWithPath(c.Path).Infof("%s: unschedule all jobs (instance deleted)", c.Path)
+	t.loggerWithPath(c.Path).Infof("unschedule all jobs (instance deleted)")
 	t.unschedule(c.Path)
 }
 
@@ -612,35 +603,32 @@ func (t *T) onLocalInstanceStatusUpdated(c *msgbus.InstanceStatusUpdated) bool {
 		return nil
 	}
 
-	log := t.loggerWithPath(c.Path)
 	changed := false
 
 	for _, e := range schedules {
 		if e.Require == "" {
 			continue
 		}
+		log := t.jobLogger(e)
 		reqs := resourcereqs.New(e.Require)
 		for requiredRID, requiredStatusList := range reqs.Requirements() {
-			err := checkReq(requiredRID, requiredStatusList)
+			satisfied := checkReq(requiredRID, requiredStatusList)
 			currentlySatisfied, ok := t.reqSatisfied.Get(c.Path, e.Key)
-			if err != nil {
+			t.reqSatisfied.Set(c.Path, e.Key, satisfied)
+			if satisfied != nil {
 				if !ok {
-					t.reqSatisfied.Set(c.Path, e.Key, false)
-					log.Infof("%s: %s: requirement unsatisfied: %s", c.Path, e.RID(), err)
+					log.Tracef("requirement unsatisfied: %s", satisfied)
 					changed = true
-				} else if currentlySatisfied {
-					t.reqSatisfied.Set(c.Path, e.Key, false)
-					log.Infof("%s: %s: requirement no longer satisfied: %s", c.Path, e.RID(), err)
+				} else if currentlySatisfied == nil {
+					log.Tracef("requirement no longer satisfied: %s", satisfied)
 					changed = true
 				}
 			} else {
 				if !ok {
-					t.reqSatisfied.Set(c.Path, e.Key, true)
-					log.Infof("%s: %s: requirement satisfied", c.Path, e.RID())
+					log.Tracef("requirement satisfied: %s", e.Require)
 					changed = true
-				} else if !currentlySatisfied {
-					t.reqSatisfied.Set(c.Path, e.Key, true)
-					log.Infof("%s: %s: requirement now satisfied", c.Path, e.RID())
+				} else if currentlySatisfied != nil {
+					log.Tracef("requirement now satisfied: %s", e.Require)
 					changed = true
 				}
 			}
@@ -654,8 +642,9 @@ func (t *T) onPeerInstanceStatusUpdated(c *msgbus.InstanceStatusUpdated) bool {
 		// we don't have a local instance
 		return false
 	}
-	log := t.loggerWithPath(c.Path)
+	pathLog := t.loggerWithPath(c.Path)
 	for rid, r := range c.Value.Resources {
+		log := pathLog.AddPrefix(rid + ": ")
 		resourceId, err := resourceid.Parse(rid)
 		if err != nil {
 			continue
@@ -668,7 +657,7 @@ func (t *T) onPeerInstanceStatusUpdated(c *msgbus.InstanceStatusUpdated) bool {
 		}
 		if _, ok := t.lastRunOnAllPeers.GetWithRID(c.Path, rid); !ok {
 			if tm, nodename, err := t.readLastRunOnFile(c.Path, rid); err == nil {
-				log.Infof("%s: %s: initialize last run at %s on %s", c.Path, rid, tm, nodename)
+				log.Infof("initialize last run at %s on %s", tm, nodename)
 				t.lastRunOnAllPeers.SetWithRID(c.Path, rid, tm)
 			}
 		}
@@ -691,13 +680,13 @@ func (t *T) onPeerInstanceStatusUpdated(c *msgbus.InstanceStatusUpdated) bool {
 			continue
 		}
 		if err := t.updateLastRunOnFile(c.Path, rid, c.Node, lastRunAtOnPeer); err != nil {
-			log.Warnf("%s: %s: write last run on file: %s", c.Path, rid, err)
+			log.Warnf("write last run on file: %s", err)
 		}
 
-		cachedLastRunAtOnPeer, ok := t.lastRunOnAllPeers.GetWithRID(c.Path, rid)
+		lastestRunAtOnPeer, ok := t.lastRunOnAllPeers.GetWithRID(c.Path, rid)
 
-		if !ok || lastRunAtOnPeer.After(cachedLastRunAtOnPeer) {
-			log.Tracef("%s: %s: last run on peer %s at %s", c.Path, rid, c.Node, lastRunAtOnPeer)
+		if !ok || lastRunAtOnPeer.After(lastestRunAtOnPeer) {
+			log.Tracef("last run on peer %s at %s", c.Node, lastRunAtOnPeer)
 			t.lastRunOnAllPeers.SetWithRID(c.Path, rid, lastRunAtOnPeer)
 		}
 	}
@@ -769,12 +758,7 @@ func (t *T) onDaemonCollectorUpdated(c *msgbus.DaemonCollectorUpdated) {
 		t.isCollectorJoinable = false
 		if previousIsCollectorJoinable {
 			t.log.Infof("disable jobs requiring a joinable collector")
-			for key, job := range t.jobs {
-				if job.schedule.RequireCollector {
-					job.Cancel()
-					delete(t.jobs, key)
-				}
-			}
+			t.unscheduleRequireCollector()
 			t.scheduleAll()
 		}
 	}
@@ -791,9 +775,14 @@ func (t *T) onObjectStatusUpdated(c *msgbus.ObjectStatusUpdated) {
 	if c.Value.ActorStatus == nil {
 		return
 	}
-	changed := false
-	if srcEv, ok := c.SrcEv.(*msgbus.InstanceStatusUpdated); ok {
+	var changed bool
+	switch srcEv := c.SrcEv.(type) {
+	case *msgbus.InstanceStatusUpdated:
 		if t.onInstanceStatusUpdated(srcEv) {
+			changed = true
+		}
+	case *msgbus.InstanceConfigUpdated:
+		if t.onInstanceConfigUpdated(srcEv) {
 			changed = true
 		}
 	}
@@ -801,29 +790,54 @@ func (t *T) onObjectStatusUpdated(c *msgbus.ObjectStatusUpdated) {
 		delete(t.provisioned, c.Path)
 		return
 	}
-	t.failover[c.Path] = c.Value.Topology == topology.Failover
-	isProvisioned := c.Value.Provisioned.IsOneOf(provisioned.True, provisioned.NotApplicable)
-	wasProvisioned, ok := t.provisioned[c.Path]
-	t.provisioned[c.Path] = isProvisioned
-	if !ok || (isProvisioned != wasProvisioned) || changed {
+	if t.updateFailover(c.Path, c.Value.Topology) {
+		changed = true
+	}
+	if t.updateProvisioned(c.Path, c.Value.Provisioned) {
+		changed = true
+	}
+	if changed {
 		t.scheduleObject(c.Path)
 	}
+}
+
+func (t *T) updateFailover(path naming.Path, state topology.T) bool {
+	wasFailover, ok := t.failover[path]
+	isFailover := state == topology.Failover
+	t.failover[path] = isFailover
+	if !ok || isFailover != wasFailover {
+		return true
+	}
+	return false
+}
+
+func (t *T) updateProvisioned(path naming.Path, state provisioned.T) bool {
+	isProvisioned := state.IsOneOf(provisioned.True, provisioned.NotApplicable)
+	wasProvisioned, ok := t.provisioned[path]
+	t.provisioned[path] = isProvisioned
+	if !ok || isProvisioned != wasProvisioned {
+		return true
+	}
+	return false
 }
 
 func (t *T) loggerWithPath(path naming.Path) *plog.Logger {
-	return naming.LogWithPath(t.log, path)
+	return naming.LogWithPath(t.log, path).AddPrefix(fmt.Sprintf("%s: ", path))
 }
 
-func (t *T) onInstanceConfigUpdated(c *msgbus.InstanceConfigUpdated) {
+func (t *T) onInstanceConfigUpdated(c *msgbus.InstanceConfigUpdated) bool {
 	if c.Value.ActorConfig == nil {
-		return
+		return false
+	}
+	if c.Node != t.localhost {
+		return false
 	}
 	switch {
 	case t.enabled:
-		t.loggerWithPath(c.Path).Infof("%s: update schedules", c.Path)
-		t.unschedule(c.Path)
-		t.scheduleObject(c.Path)
+		t.loggerWithPath(c.Path).Tracef("update schedules")
+		return true
 	}
+	return false
 }
 
 func (t *T) onNodeConfigUpdated(c *msgbus.NodeConfigUpdated) {
@@ -840,8 +854,7 @@ func (t *T) onNodeConfigUpdated(c *msgbus.NodeConfigUpdated) {
 	}
 	switch {
 	case t.enabled:
-		t.log.Infof("node: update schedules")
-		t.unschedule(naming.Path{})
+		t.log.Tracef("node: update schedules")
 		t.scheduleNode()
 	}
 }
@@ -885,14 +898,6 @@ func (t *T) scheduleAll() {
 	t.scheduleNode()
 }
 
-func (t *T) schedule(p naming.Path) {
-	if p.IsZero() {
-		t.scheduleNode()
-	} else {
-		t.scheduleObject(p)
-	}
-}
-
 func (t *T) scheduleNode() {
 	if !t.enabled {
 		return
@@ -904,20 +909,19 @@ func (t *T) scheduleNode() {
 	}
 
 	path := naming.Path{}
-	table := o.Schedules()
-	defer t.updateExposedSchedules(path)
 
-	for _, e := range table {
+	for _, e := range o.Schedules() {
 		t.schedules.Add(path, e)
 		t.createJob(e)
 	}
+
+	t.updateExposedSchedules(path)
 }
 
 func (t *T) scheduleObject(path naming.Path) {
 	if !t.enabled {
 		return
 	}
-	log := t.loggerWithPath(path).WithPrefix(t.log.Prefix() + path.String() + ": ")
 
 	instanceConfig := instance.ConfigData.GetByPathAndNode(path, t.localhost)
 	if instanceConfig == nil || instanceConfig.ActorConfig == nil || instanceConfig.Schedules == nil || len(instanceConfig.Schedules) == 0 {
@@ -925,63 +929,108 @@ func (t *T) scheduleObject(path naming.Path) {
 		return
 	}
 
-	defer t.updateExposedSchedules(path)
-
 	isProvisioned, hasProvisioned := t.provisioned[path]
+	jobIds := make(map[string]any)
 
-	for _, scheduleConfig := range instanceConfig.Schedules {
+	scheduleOne := func(scheduleConfig schedule.Config) {
 		e := schedule.Entry{
 			Node:   t.localhost,
 			Path:   path,
 			Config: scheduleConfig,
 		}
+
+		// Remember we saw that job id, so we can purge unconfigured jobs after this loop
+		jobIds[newJobId(e)] = nil
+
+		log := t.jobLogger(e)
+		prevSchedule, hasSchedule := t.schedules.Get(path, e.Key)
+		hasJob := t.jobs.Has(e)
 		t.schedules.Add(path, e)
-		if e.Schedule == "" || e.Schedule == "@0" {
-			if t.jobs.Has(e) {
-				log.Infof("%s: unschedule %s (schedule is now @0)", e.RID(), e.Action)
-				t.jobs.Del(e)
+		var validated []string
+		var skipped string
+
+		if hasSchedule && (scheduleConfig.Schedule != prevSchedule.Config.Schedule) {
+			if hasJob {
+				if e.Schedule == "" {
+					log.Infof("unschedule (schedule is now @0)")
+					t.jobs.Del(e)
+					return
+				} else {
+					// At the end of this func, if we did not recreate the job,
+					// log it as unscheduled
+					defer func() {
+						if !t.jobs.Has(e) {
+							log.Infof("unschedule on config change, skip reschedule (%s)", skipped)
+						}
+					}()
+					t.jobs.Del(e)
+				}
 			}
-			continue
 		}
+		validated = append(validated, e.Schedule)
+
 		if e.RequireProvisioned {
 			if !hasProvisioned {
-				log.Infof("%s: skip schedule %s (instance provisioned state is still unknown)", e.RID(), e.Action)
-				t.jobs.Del(e)
-				continue
+				if hasJob {
+					log.Infof("unschedule (instance provisioned state is still unknown)")
+					t.jobs.Del(e)
+				} else {
+					skipped = "instance provisioned state is still unknown"
+				}
+				return
 			}
 			if !isProvisioned {
-				if t.jobs.Has(e) {
-					log.Infof("%s: unschedule %s (instance no longer provisionned)", e.RID(), e.Action)
+				if hasJob {
+					log.Infof("unschedule (instance no longer provisionned)")
 					t.jobs.Del(e)
 				} else {
-					log.Infof("%s: skip schedule %s (instance not provisioned)", e.RID(), e.Action)
+					skipped = "instance no longer provisionned"
 				}
-				continue
+				return
 			}
+			validated = append(validated, "provisioned")
 		}
-		if isSatisfied, ok := t.reqSatisfied.Get(path, e.Key); ok {
-			if !isSatisfied {
-				if t.jobs.Has(e) {
-					log.Infof("%s: unschedule %s (requirements no longer met)", e.RID(), e.Action)
+		if satisfied, ok := t.reqSatisfied.Get(path, e.Key); ok {
+			if satisfied != nil {
+				if hasJob {
+					log.Infof("unschedule (%s)", satisfied)
 					t.jobs.Del(e)
 				} else {
-					log.Infof("%s: skip schedule %s (requirements not met)", e.RID(), e.Action)
+					skipped = satisfied.Error()
 				}
-				continue
+				return
 			}
-
+			validated = append(validated, fmt.Sprintf("require %s is satisfied", e.Require))
 		} else if e.Require != "" {
-			if t.jobs.Has(e) {
-				log.Infof("%s: unschedule %s (requirements not yet evaluated)", e.RID(), e.Action)
+			if hasJob {
+				log.Infof("unschedule (require %s not yet evaluated)", e.Require)
 				t.jobs.Del(e)
 			} else {
-				log.Infof("%s: skip schedule %s (requirements not yet evaluated)", e.RID(), e.Action)
+				skipped = fmt.Sprintf("require %s not yet evaluated", e.Require)
 			}
-			continue
+			return
 		}
 		t.schedules.Add(path, e)
-		t.createJob(e)
+		if !t.jobs.Has(e) {
+			log.Infof("schedule (%s)", strings.Join(validated, ", "))
+			t.createJob(e)
+		}
 	}
+
+	for _, scheduleConfig := range instanceConfig.Schedules {
+		scheduleOne(scheduleConfig)
+	}
+
+	// Purge unconfigured jobs
+	for _, id := range t.jobs.PathIds(path) {
+		if _, ok := jobIds[id]; !ok {
+			job := t.jobs[id]
+			t.jobLogger(job.schedule).Infof("unschedule (no longer configured)")
+			t.jobs.DelId(id)
+		}
+	}
+
+	t.updateExposedSchedules(path)
 }
 
 func (t *T) updateExposedSchedules(path naming.Path) {
@@ -993,9 +1042,18 @@ func (t *T) updateExposedSchedules(path naming.Path) {
 	schedule.TableData.Set(path, &table)
 }
 
+func (t *T) unscheduleRequireCollector() {
+	for key, job := range t.jobs {
+		if job.schedule.RequireCollector {
+			job.Cancel()
+			delete(t.jobs, key)
+		}
+	}
+}
+
 func (t *T) unschedule(path naming.Path) {
 	t.reqSatisfied.UnsetPath(path)
-	t.schedules.DelByPath(path)
+	t.schedules.Del(path)
 	t.jobs.DelPath(path)
 }
 
@@ -1005,27 +1063,27 @@ func (t *T) publishUpdate() {
 	t.publisher.Pub(&msgbus.DaemonSchedulerUpdated{Node: t.localhost, Value: *t.status.DeepCopy()}, pubsub.Label{"node", t.localhost})
 }
 
-func (t boolMap) key(path naming.Path, s string) string {
+func (t errMap) key(path naming.Path, s string) string {
 	return fmt.Sprintf("%s:%s", path.String(), s)
 }
 
-func (t boolMap) Get(path naming.Path, s string) (bool, bool) {
+func (t errMap) Get(path naming.Path, s string) (error, bool) {
 	id := t.key(path, s)
 	v, ok := t[id]
 	return v, ok
 }
 
-func (t boolMap) Set(path naming.Path, s string, v bool) {
+func (t errMap) Set(path naming.Path, s string, err error) {
 	id := t.key(path, s)
-	t[id] = v
+	t[id] = err
 }
 
-func (t boolMap) Unset(path naming.Path, s string) {
+func (t errMap) Unset(path naming.Path, s string) {
 	id := t.key(path, s)
 	delete(t, id)
 }
 
-func (t boolMap) UnsetPath(path naming.Path) {
+func (t errMap) UnsetPath(path naming.Path) {
 	prefix := t.key(path, "")
 	for k, _ := range t {
 		if strings.HasPrefix(k, prefix) {
