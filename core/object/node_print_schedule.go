@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/opensvc/om3/v3/core/driver"
-	"github.com/opensvc/om3/v3/core/resource"
 	"github.com/opensvc/om3/v3/core/resourceid"
 	"github.com/opensvc/om3/v3/core/schedule"
 	"github.com/opensvc/om3/v3/util/file"
@@ -63,9 +62,6 @@ func (t *Node) Schedules() schedule.Table {
 		t.newScheduleEntry("sysreport", "sysreport", "", "sysreport_push"),
 		t.newScheduleEntry("dequeue_actions", "dequeue_actions", "", "dequeue_actions_push"),
 	)
-	type scheduleOptioner interface {
-		ScheduleOptions() resource.ScheduleOptions
-	}
 	for _, s := range t.config.SectionStrings() {
 		rid, err := resourceid.Parse(s)
 		if err != nil {

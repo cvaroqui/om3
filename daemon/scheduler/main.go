@@ -15,7 +15,6 @@ import (
 	"github.com/opensvc/om3/v3/core/kwoption"
 	"github.com/opensvc/om3/v3/core/naming"
 	"github.com/opensvc/om3/v3/core/node"
-	"github.com/opensvc/om3/v3/core/object"
 	"github.com/opensvc/om3/v3/core/provisioned"
 	"github.com/opensvc/om3/v3/core/resourceid"
 	"github.com/opensvc/om3/v3/core/resourcereqs"
@@ -834,7 +833,7 @@ func (t *T) onInstanceConfigUpdated(c *msgbus.InstanceConfigUpdated) bool {
 	}
 	switch {
 	case t.enabled:
-		t.loggerWithPath(c.Path).Tracef("update schedules")
+		t.loggerWithPath(c.Path).Tracef("update schedules on config change")
 		return true
 	}
 	return false
@@ -854,7 +853,7 @@ func (t *T) onNodeConfigUpdated(c *msgbus.NodeConfigUpdated) {
 	}
 	switch {
 	case t.enabled:
-		t.log.Tracef("node: update schedules")
+		t.log.Tracef("node: update schedules on config change")
 		t.scheduleNode()
 	}
 }
@@ -902,17 +901,83 @@ func (t *T) scheduleNode() {
 	if !t.enabled {
 		return
 	}
-	o, err := object.NewNode()
-	if err != nil {
-		t.log.Errorf("node: %s", err)
+	nodeConfig := node.ConfigData.GetByNode(t.localhost)
+	if nodeConfig == nil || nodeConfig.Schedules == nil || len(nodeConfig.Schedules) == 0 {
 		return
 	}
 
 	path := naming.Path{}
+	jobIds := make(map[string]any)
 
-	for _, e := range o.Schedules() {
+	scheduleOne := func(scheduleConfig schedule.Config) {
+		e := schedule.Entry{
+			Node:   t.localhost,
+			Config: scheduleConfig,
+		}
+
+		// Remember we saw that job id, so we can purge unconfigured jobs after this loop
+		jobIds[newJobId(e)] = nil
+
+		log := t.jobLogger(e)
+		prevSchedule, hasSchedule := t.schedules.Get(path, e.Key)
+		hasJob := t.jobs.Has(e)
 		t.schedules.Add(path, e)
-		t.createJob(e)
+		var validated []string
+		var skipped string
+
+		if hasSchedule && (scheduleConfig.Schedule != prevSchedule.Config.Schedule) {
+			if hasJob {
+				if e.Schedule == "" || e.Schedule == "@0" {
+					log.Infof("unschedule (schedule is now @0)")
+					t.jobs.Del(e)
+					return
+				} else {
+					// At the end of this func, if we did not recreate the job,
+					// log it as unscheduled
+					defer func() {
+						if !t.jobs.Has(e) {
+							log.Infof("unschedule on config change, skip reschedule (%s)", skipped)
+						}
+					}()
+					t.jobs.Del(e)
+				}
+			} else {
+				if e.Schedule == "" || e.Schedule == "@0" {
+					return
+				}
+			}
+		} else if e.Schedule == "" || e.Schedule == "@0" {
+			return
+		}
+		validated = append(validated, e.Schedule)
+
+		if e.RequireCollector && !t.isCollectorJoinable {
+			if hasJob {
+				log.Infof("unschedule (collector unjoignable)")
+				t.jobs.Del(e)
+			} else {
+				skipped = "collector unjoignable"
+			}
+			return
+		}
+
+		if !t.jobs.Has(e) {
+			log.Infof("schedule (%s)", strings.Join(validated, ", "))
+			t.createJob(e)
+		}
+	}
+
+	for _, scheduleConfig := range nodeConfig.Schedules {
+		scheduleOne(scheduleConfig)
+	}
+
+	// Purge unconfigured jobs
+	for _, id := range t.jobs.PathIds(path) {
+		if _, ok := jobIds[id]; !ok {
+			job := t.jobs[id]
+			t.jobLogger(job.schedule).Infof("unschedule (no longer configured)")
+			t.jobs.DelId(id)
+		}
 	}
 
 	t.updateExposedSchedules(path)
@@ -951,7 +1016,7 @@ func (t *T) scheduleObject(path naming.Path) {
 
 		if hasSchedule && (scheduleConfig.Schedule != prevSchedule.Config.Schedule) {
 			if hasJob {
-				if e.Schedule == "" {
+				if e.Schedule == "" || e.Schedule == "@0" {
 					log.Infof("unschedule (schedule is now @0)")
 					t.jobs.Del(e)
 					return
@@ -965,9 +1030,25 @@ func (t *T) scheduleObject(path naming.Path) {
 					}()
 					t.jobs.Del(e)
 				}
+			} else {
+				if e.Schedule == "" || e.Schedule == "@0" {
+					return
+				}
 			}
+		} else if e.Schedule == "" || e.Schedule == "@0" {
+			return
 		}
 		validated = append(validated, e.Schedule)
+
+		if e.RequireCollector && !t.isCollectorJoinable {
+			if hasJob {
+				log.Infof("unschedule (collector unjoignable)")
+				t.jobs.Del(e)
+			} else {
+				skipped = "collector unjoignable"
+			}
+			return
+		}
 
 		if e.RequireProvisioned {
 			if !hasProvisioned {
@@ -1010,7 +1091,6 @@ func (t *T) scheduleObject(path naming.Path) {
 			}
 			return
 		}
-		t.schedules.Add(path, e)
 		if !t.jobs.Has(e) {
 			log.Infof("schedule (%s)", strings.Join(validated, ", "))
 			t.createJob(e)

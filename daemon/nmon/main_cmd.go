@@ -11,6 +11,7 @@ import (
 
 	"github.com/opensvc/om3/v3/core/clusternode"
 	"github.com/opensvc/om3/v3/core/node"
+	"github.com/opensvc/om3/v3/core/object"
 	"github.com/opensvc/om3/v3/core/rawconfig"
 	"github.com/opensvc/om3/v3/daemon/msgbus"
 	"github.com/opensvc/om3/v3/util/errcontext"
@@ -106,6 +107,11 @@ func (t *Manager) getNodeConfig() node.Config {
 	}
 	if cfg.MaxParallel < MinMaxParallel {
 		cfg.MaxParallel = MinMaxParallel
+	}
+
+	node, _ := object.NewNode(object.WithVolatile(true))
+	for _, e := range node.Schedules() {
+		cfg.Schedules = append(cfg.Schedules, e.Config)
 	}
 
 	return cfg

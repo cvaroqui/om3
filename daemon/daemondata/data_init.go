@@ -11,6 +11,7 @@ import (
 	"github.com/opensvc/om3/v3/core/node"
 	"github.com/opensvc/om3/v3/core/object"
 	"github.com/opensvc/om3/v3/core/rawconfig"
+	"github.com/opensvc/om3/v3/core/schedule"
 	"github.com/opensvc/om3/v3/daemon/daemonsubsystem"
 	"github.com/opensvc/om3/v3/daemon/msgbus"
 	"github.com/opensvc/om3/v3/util/file"
@@ -85,6 +86,7 @@ func newNodeData(localNode string) node.Node {
 			MaxParallel:     object.DefaultNodeMaxParallel,
 			MinAvailMemPct:  0,
 			MinAvailSwapPct: 0,
+			Schedules:       make([]schedule.Config, 0),
 		},
 		Instance: map[string]instance.Instance{},
 		Monitor: node.Monitor{

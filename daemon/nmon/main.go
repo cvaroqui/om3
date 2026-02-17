@@ -788,7 +788,7 @@ func (t *Manager) loadConfigAndPublish() error {
 		return err
 	}
 
-	if prevNodeConfig != t.nodeConfig {
+	if !prevNodeConfig.Equals(t.nodeConfig) {
 		node.ConfigData.Set(t.localhost, t.nodeConfig.DeepCopy())
 		t.publisher.Pub(&msgbus.NodeConfigUpdated{Node: t.localhost, Value: t.nodeConfig}, t.labelLocalhost)
 	}
