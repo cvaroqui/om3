@@ -854,7 +854,7 @@ func (t *Manager) loadPools() {
 			t.log.Warnf("loading pool '%s' status: %s", poolName, ctx.Err())
 			return
 		}
-		t.log.Infof("pool '%s' status loaded", poolName)
+		t.log.Debugf("pool '%s' status loaded", poolName)
 
 		renewedMu.Lock()
 		renewed[poolName] = nil
