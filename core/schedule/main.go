@@ -1,6 +1,7 @@
 package schedule
 
 import (
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,12 +18,14 @@ type (
 		Action             string `json:"action"`
 		Schedule           string `json:"schedule"`
 		Key                string `json:"key"`
-		LastRunFile        string `json:"last_run_file"`
-		LastSuccessFile    string `json:"last_success_file"`
 		MaxParallel        int    `json:"max_parallel"`
-		Require            string `json:"require"`
+		Require            string `json:"require,omitempty"`
 		RequireCollector   bool   `json:"require_collector"`
 		RequireProvisioned bool   `json:"require_provisioned"`
+
+		// StatefileKey is used in the last run filename and last run success formatters.
+		// Defaults to Action if empty.
+		StatefileKey string `json:"statefile_key,omitempty"`
 	}
 
 	Entry struct {
@@ -107,13 +110,12 @@ func (t Table) DeepCopy() *Table {
 			Config: Config{
 				Action:             x.Action,
 				Key:                x.Key,
-				LastRunFile:        x.LastRunFile,
-				LastSuccessFile:    x.LastSuccessFile,
 				MaxParallel:        x.MaxParallel,
 				Require:            x.Require,
 				RequireCollector:   x.RequireCollector,
 				RequireProvisioned: x.RequireProvisioned,
 				Schedule:           x.Schedule,
+				StatefileKey:       x.StatefileKey,
 			},
 			LastRunAt: x.LastRunAt,
 			NextRunAt: x.NextRunAt,
@@ -149,19 +151,32 @@ func (t Entry) LogPrefix() string {
 	return s.String()
 }
 
-func (t Entry) RID() string {
+func (t *Entry) RID() string {
 	k := key.Parse(t.Key)
 	return k.Section
 }
 
-func (t Entry) SetLastSuccess(tm time.Time) error {
-	return file.Touch(t.LastSuccessFile, tm)
+func (t *Entry) SetLastSuccess(tm time.Time) error {
+	return file.Touch(t.LastSuccessFile(), tm)
 }
 
-func (t Entry) SetLastRun(tm time.Time) error {
-	return file.Touch(t.LastRunFile, tm)
+func (t *Entry) SetLastRun(tm time.Time) error {
+	return file.Touch(t.LastRunFile(), tm)
 }
 
-func (t Entry) GetLastRun() time.Time {
-	return file.ModTime(t.LastRunFile)
+func (t *Entry) GetLastRun() time.Time {
+	return file.ModTime(t.LastRunFile())
+}
+
+func (t *Entry) LastRunFile() string {
+	return filepath.Join(t.Path.VarDir(), "scheduler", t.StatefileKey)
+}
+
+func (t *Entry) LastSuccessFile() string {
+	return t.LastRunFile() + ".success"
+}
+
+func (t *Entry) LoadLast() time.Time {
+	fpath := t.LastRunFile()
+	return file.ModTime(fpath)
 }

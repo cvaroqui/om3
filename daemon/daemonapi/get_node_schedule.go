@@ -43,12 +43,11 @@ func (a *DaemonAPI) getLocalSchedule(ctx echo.Context) error {
 				Action:             e.Action,
 				Key:                e.Key,
 				LastRunAt:          e.LastRunAt,
-				LastRunFile:        e.LastRunFile,
-				LastSuccessFile:    e.LastSuccessFile,
 				NextRunAt:          e.NextRunAt,
 				RequireCollector:   e.RequireCollector,
 				RequireProvisioned: e.RequireProvisioned,
 				Schedule:           e.Schedule,
+				StatefileKey:       e.StatefileKey,
 			},
 		}
 		resp.Items = append(resp.Items, item)

@@ -1,14 +1,10 @@
 package object
 
 import (
-	"path/filepath"
-	"time"
-
 	"github.com/opensvc/om3/v3/core/kwoption"
 	"github.com/opensvc/om3/v3/core/naming"
 	"github.com/opensvc/om3/v3/core/resource"
 	"github.com/opensvc/om3/v3/core/schedule"
-	"github.com/opensvc/om3/v3/util/file"
 	"github.com/opensvc/om3/v3/util/hostname"
 	"github.com/opensvc/om3/v3/util/key"
 )
@@ -21,16 +17,7 @@ func (t *actor) lastRunFile(action, rid, desc string) string {
 	if rid != "" {
 		base = base + "_" + rid
 	}
-	return filepath.Join(t.VarDir(), "scheduler", base)
-}
-
-func (t *actor) lastSuccessFile(action, rid, base string) string {
-	return filepath.Join(t.lastRunFile(action, rid, base) + ".success")
-}
-
-func (t *actor) loadLast(action, rid, base string) time.Time {
-	fpath := t.lastRunFile(action, rid, base)
-	return file.ModTime(fpath)
+	return base
 }
 
 func (t *actor) newScheduleEntry(action, keyStr, rid, base string, reqCol, reqProv bool) schedule.Entry {
@@ -39,21 +26,21 @@ func (t *actor) newScheduleEntry(action, keyStr, rid, base string, reqCol, reqPr
 	if err != nil {
 		panic(err)
 	}
-	return schedule.Entry{
+	entry := schedule.Entry{
 		Config: schedule.Config{
 			Action:             action,
 			Key:                k.String(),
-			LastRunFile:        t.lastRunFile(action, rid, base),
-			LastSuccessFile:    t.lastSuccessFile(action, rid, base),
 			MaxParallel:        1,
 			RequireCollector:   reqCol,
 			RequireProvisioned: reqProv,
 			Schedule:           def,
+			StatefileKey:       t.lastRunFile(action, rid, base),
 		},
-		LastRunAt: t.loadLast(action, rid, base),
-		Node:      hostname.Hostname(),
-		Path:      t.path,
+		Node: hostname.Hostname(),
+		Path: t.path,
 	}
+	entry.LastRunAt = entry.LoadLast()
+	return entry
 }
 
 func (t *actor) Schedules() schedule.Table {
