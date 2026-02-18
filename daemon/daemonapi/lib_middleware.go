@@ -32,11 +32,13 @@ var (
 
 	// logRequestLevelPerPath defines logRequestMiddleWare log level per path.
 	// The default value is LevelInfo
-	logRequestLevelPerPath = map[string]zerolog.Level{
-		"/metrics":           zerolog.DebugLevel,
-		"/api/openapi":       zerolog.DebugLevel,
-		"/api/docs/*":        zerolog.DebugLevel,
+	logRequestLevelPerPrefix = map[string]zerolog.Level{
+		"/metrics":           zerolog.TraceLevel,
+		"/api/openapi":       zerolog.TraceLevel,
+		"/api/docs":          zerolog.TraceLevel,
 		"/api/relay/message": zerolog.DebugLevel,
+		"/api":               zerolog.DebugLevel,
+		// "/api/instance/path/:namespace/:kind/:name/status": zerolog.InfoLevel,
 	}
 
 	rateLimitDeniedTotal = promauto.NewCounterVec(
@@ -228,9 +230,15 @@ func LogUserMiddleware(parent context.Context) echo.MiddlewareFunc {
 func LogRequestMiddleWare(parent context.Context) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			level := zerolog.InfoLevel
-			if l, ok := logRequestLevelPerPath[c.Path()]; ok {
-				level = l
+			level := zerolog.DebugLevel
+			if lvl, ok := logRequestLevelPerPrefix[c.Path()]; ok {
+				level = lvl
+			} else {
+				for prefix, lvl := range logRequestLevelPerPrefix {
+					if strings.HasPrefix(c.Path(), prefix+"/") {
+						level = lvl
+					}
+				}
 			}
 			if level != zerolog.NoLevel {
 				userDesc := userFromContext(c).GetUserName()

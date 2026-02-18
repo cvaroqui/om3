@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/opensvc/om3/v3/core/env"
 	"github.com/opensvc/om3/v3/core/schedule"
@@ -68,23 +69,31 @@ func (o *T) action(e schedule.Entry) error {
 		"OSVC_SESSION_ID="+sid.String(),
 	)
 
+	// Unless the daemon runs with --debug or --trace, we don't want to
+	// log the execution in journald nor syslogd to avoid uncontrolled
+	// growth or rotation of the logging backend files.
+	if lvl := zerolog.GlobalLevel(); lvl > zerolog.DebugLevel {
+		// OSVC_NO_LOG_FILE=1
+		cmdEnv = append(cmdEnv, env.NoLogFileSetenvArg())
+	}
+
 	cmd := command.New(
 		command.WithName(os.Args[0]),
 		command.WithArgs(cmdArgs),
 		command.WithLogger(o.log),
 		command.WithEnv(cmdEnv),
 	)
-	o.log.Tracef("-> exec %s", cmd)
+	o.log.Debugf("-> exec %s", cmd)
 	o.publisher.Pub(&msgbus.Exec{Command: cmd.String(), Node: o.localhost, Origin: "scheduler", SessionID: sid}, labels...)
 	startTime := time.Now()
 	if err := cmd.Run(); err != nil {
 		duration := time.Now().Sub(startTime)
 		o.publisher.Pub(&msgbus.ExecFailed{Command: cmd.String(), Duration: duration, ErrS: err.Error(), Node: o.localhost, Origin: "scheduler", SessionID: sid}, labels...)
-		o.log.Attr("cmd", cmd.String()).Errorf("%s: %s", cmd, err)
+		o.log.Errorf("%s: %s", cmd, err)
 		return err
 	}
 	duration := time.Now().Sub(startTime)
 	o.publisher.Pub(&msgbus.ExecSuccess{Command: cmd.String(), Duration: duration, Node: o.localhost, Origin: "scheduler", SessionID: sid}, labels...)
-	o.log.Tracef("<- exec %s", cmd)
+	o.log.Debugf("<- exec %s", cmd)
 	return nil
 }

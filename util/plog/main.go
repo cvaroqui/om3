@@ -41,9 +41,23 @@ func NewLogger(logger zerolog.Logger) *Logger {
 	}
 }
 
+func (t *Logger) clone() *Logger {
+	return &Logger{
+		logger: t.logger,
+		prefix: t.prefix,
+	}
+}
+
+func (t *Logger) AddPrefix(prefix string) *Logger {
+	n := t.clone()
+	n.prefix = t.prefix + prefix
+	return n
+}
+
 func (t *Logger) WithPrefix(prefix string) *Logger {
-	t.prefix = prefix
-	return t
+	n := t.clone()
+	n.prefix = prefix
+	return n
 }
 
 func (t *Logger) Prefix() string {
@@ -90,41 +104,38 @@ func (t *Logger) Levelf(level zerolog.Level, format string, a ...any) {
 }
 
 func (t *Logger) Attr(k string, v any) *Logger {
-	logger := Logger{
-		logger: t.logger,
-		prefix: t.prefix,
-	}
+	n := t.clone()
 	switch i := v.(type) {
 	case string:
-		logger.logger = t.logger.With().Str(k, i).Logger()
+		n.logger = t.logger.With().Str(k, i).Logger()
 	case []string:
-		logger.logger = t.logger.With().Strs(k, i).Logger()
+		n.logger = t.logger.With().Strs(k, i).Logger()
 	case []byte:
-		logger.logger = t.logger.With().Bytes(k, i).Logger()
+		n.logger = t.logger.With().Bytes(k, i).Logger()
 	case float32:
-		logger.logger = t.logger.With().Float32(k, i).Logger()
+		n.logger = t.logger.With().Float32(k, i).Logger()
 	case float64:
-		logger.logger = t.logger.With().Float64(k, i).Logger()
+		n.logger = t.logger.With().Float64(k, i).Logger()
 	case bool:
-		logger.logger = t.logger.With().Bool(k, i).Logger()
+		n.logger = t.logger.With().Bool(k, i).Logger()
 	case int:
-		logger.logger = t.logger.With().Int(k, i).Logger()
+		n.logger = t.logger.With().Int(k, i).Logger()
 	case int32:
-		logger.logger = t.logger.With().Int32(k, i).Logger()
+		n.logger = t.logger.With().Int32(k, i).Logger()
 	case int64:
-		logger.logger = t.logger.With().Int64(k, i).Logger()
+		n.logger = t.logger.With().Int64(k, i).Logger()
 	case uint:
-		logger.logger = t.logger.With().Uint(k, i).Logger()
+		n.logger = t.logger.With().Uint(k, i).Logger()
 	case uint32:
-		logger.logger = t.logger.With().Uint32(k, i).Logger()
+		n.logger = t.logger.With().Uint32(k, i).Logger()
 	case uint64:
-		logger.logger = t.logger.With().Uint64(k, i).Logger()
+		n.logger = t.logger.With().Uint64(k, i).Logger()
 	case time.Duration:
-		logger.logger = t.logger.With().Dur(k, i).Logger()
+		n.logger = t.logger.With().Dur(k, i).Logger()
 	default:
-		logger.logger = t.logger.With().Interface(k, v).Logger()
+		n.logger = t.logger.With().Interface(k, v).Logger()
 	}
-	return &logger
+	return n
 }
 
 func (t *Logger) Level(level zerolog.Level) *Logger {

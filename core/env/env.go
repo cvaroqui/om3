@@ -24,6 +24,8 @@ var (
 	NamespaceVar       = "OSVC_NAMESPACE"
 	KindVar            = "OSVC_KIND"
 	ContextVar         = "OSVC_CONTEXT"
+
+	NoLogFileVar = "OSVC_NO_LOG_FILE"
 )
 
 // HasDaemonOrigin returns true if the environment variable OSVC_ACTION_ORIGIN
@@ -90,4 +92,11 @@ func Kind() string {
 // configuration via the OSVC_CONTEXT variable.
 func Context() string {
 	return os.Getenv(ContextVar)
+}
+
+func NoLogFile() bool {
+	return os.Getenv(NoLogFileVar) == "1"
+}
+func NoLogFileSetenvArg() string {
+	return fmt.Sprintf("%s=1", NoLogFileVar)
 }

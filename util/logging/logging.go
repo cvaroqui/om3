@@ -29,6 +29,9 @@ type Config struct {
 	// Enable console logging coloring
 	WithColor bool
 
+	WithJournald bool
+	WithSyslogd  bool
+
 	// LogFile makes the framework log to a file
 	LogFile string
 
@@ -131,12 +134,14 @@ func Configure(config Config) error {
 
 	zerolog.TimeFieldFormat = time.RFC3339Nano
 
-	if journalEnabled() {
+	if config.WithJournald && journalEnabled() {
 		if writer := journald.NewJournalDWriter(); writer != nil {
 			writers = append(writers, writer)
 		}
-	} else if writer, err := syslog.New(syslog.LOG_INFO|syslog.LOG_USER, "om"); err == nil {
-		writers = append(writers, writer)
+	} else if config.WithSyslogd {
+		if writer, err := syslog.New(syslog.LOG_INFO|syslog.LOG_USER, "om"); err == nil {
+			writers = append(writers, writer)
+		}
 	}
 
 	if config.WithConsoleLog {

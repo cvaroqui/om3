@@ -6,7 +6,7 @@ import "github.com/opensvc/om3/v3/util/pubsub"
 func (data *ClusterData) onNodeConfigUpdated(m *NodeConfigUpdated) {
 	newConfig := m.Value
 	v := data.Cluster.Node[m.Node]
-	if v.Config == newConfig {
+	if v.Config.Equals(newConfig) {
 		return
 	}
 	v.Config = m.Value

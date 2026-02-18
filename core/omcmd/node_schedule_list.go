@@ -62,13 +62,12 @@ func (t *CmdNodeScheduleList) extractLocal() (api.ScheduleItems, error) {
 				Action:             e.Action,
 				Key:                e.Key,
 				LastRunAt:          e.LastRunAt,
-				LastRunFile:        e.LastRunFile,
-				LastSuccessFile:    e.LastSuccessFile,
 				MaxParallel:        e.MaxParallel,
 				NextRunAt:          e.NextRunAt,
 				RequireCollector:   e.RequireCollector,
 				RequireProvisioned: e.RequireProvisioned,
 				Schedule:           e.Schedule,
+				StatefileKey:       e.StatefileKey,
 			},
 		}
 		items = append(items, item)

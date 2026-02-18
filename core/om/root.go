@@ -92,10 +92,13 @@ func configureLogger() error {
 	if traceFlag {
 		level = "trace"
 	}
+	noLogFile := env.NoLogFile()
 	err := logging.Configure(logging.Config{
 		WithConsoleLog: !quietFlag || debugFlag || traceFlag || foregroundFlag,
 		WithColor:      colorFlag != "no",
 		WithCaller:     callerFlag,
+		WithJournald:   !noLogFile,
+		WithSyslogd:    !noLogFile,
 		Level:          level,
 	})
 	if err != nil {

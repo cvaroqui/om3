@@ -405,13 +405,17 @@ func (t Paths) Merge(other Paths) Paths {
 // variable persistent data is stored as files.
 func (t Path) VarDir() string {
 	var s string
+	if t.IsZero() {
+		return filepath.Join(rawconfig.Paths.Var, "node")
+	}
+
 	switch t.Namespace {
 	case "", NsRoot:
-		s = fmt.Sprintf("%s/%s/%s", rawconfig.Paths.Var, t.Kind, t.Name)
+		s = filepath.Join(rawconfig.Paths.Var, t.Kind.String(), t.Name)
 	default:
-		s = fmt.Sprintf("%s/%s", rawconfig.Paths.VarNs, t)
+		s = filepath.Join(rawconfig.Paths.VarNs, t.String())
 	}
-	return filepath.FromSlash(s)
+	return s
 }
 
 // TmpDir returns the directory on the local filesystem where the object
