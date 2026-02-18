@@ -378,7 +378,7 @@ func (t *T) onJobAlarm(c eventJobAlarm) {
 		}
 		if satisfied, ok := t.reqSatisfied.Get(e.Path, e.Key); ok {
 			if satisfied != nil {
-				logger.Tracef("abort (requirements no longer met)")
+				logger.Infof("abort (requirements no longer met)")
 				return
 			}
 		} else if e.Require != "" {
