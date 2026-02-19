@@ -125,7 +125,7 @@ func (d *data) pubMsgFromNodeConfigDiffForNode(peer string) {
 			node.ConfigData.Set(peer, next.DeepCopy())
 			d.publisher.Pub(&msgbus.NodeConfigUpdated{Node: peer, Value: *next.DeepCopy()},
 				pubsub.Label{"node", peer},
-				// why not labelFromPeer ?
+				labelFromPeer,
 			)
 		}
 	}
@@ -137,7 +137,7 @@ func (d *data) pubMsgFromNodeConfigDiffForNode(peer string) {
 		node.ConfigData.Set(peer, next.DeepCopy())
 		d.publisher.Pub(&msgbus.NodeConfigUpdated{Node: peer, Value: *next.DeepCopy()},
 			pubsub.Label{"node", peer},
-			// why not labelFromPeer ?
+			labelFromPeer,
 		)
 	}
 
