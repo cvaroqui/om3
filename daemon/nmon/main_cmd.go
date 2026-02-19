@@ -82,6 +82,7 @@ func (t *Manager) getNodeConfig() node.Config {
 		keyMinAvailSwapPct        = key.New("node", "min_avail_swap_pct")
 	)
 	cfg := node.Config{}
+	cfg.Labels = t.config.SectionMap("labels")
 	if d := t.config.GetDuration(keyMaintenanceGracePeriod); d != nil {
 		cfg.MaintenanceGracePeriod = *d
 	}

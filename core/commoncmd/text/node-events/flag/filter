@@ -64,13 +64,14 @@ Receive only events matching the filtering expression formatted as:
      NodeAlive, NodeStale
      NodeConfigUpdated, NodeDataUpdated, NodeFrozen
      NodeFrozenFileRemoved, NodeFrozenFileUpdated
+     NodeLabelsUpdated, NodeLabelsCommited
      NodeMonitorDeleted, NodeMonitorUpdated
      NodeOsPathsUpdated
      NodePoolStatusUpdated, NodePoolStatusDeleted
      NodeRejoin, NodeSplitAction
      NodeStatsUpdated
      NodeStatusUpdated
-     NodeStatusArbitratorsUpdated, NodeStatusGenUpdates, NodeStatusLabelsUpdated
+     NodeStatusArbitratorsUpdated, NodeStatusGenUpdates,
      SetNodeMonitor
      
 ### Object

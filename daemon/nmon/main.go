@@ -30,7 +30,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"sync"
 	"time"
 
@@ -59,6 +58,7 @@ import (
 	"github.com/opensvc/om3/v3/util/pubsub"
 	"github.com/opensvc/om3/v3/util/san"
 	"github.com/opensvc/om3/v3/util/version"
+	"github.com/opensvc/om3/v3/util/xmap"
 )
 
 type (
@@ -118,7 +118,7 @@ type (
 		// cacheNodesInfo is a map of nodes to node.NodeInfo, it is used to
 		// maintain the nodes_info.json file.
 		// local values are computed by nmon.
-		// peer values are updated from msgbus events NodeStatusLabelsUpdated, NodeConfigUpdated, NodeOsPathsUpdated
+		// peer values are updated from msgbus events NodeLabelsUpdated, NodeConfigUpdated, NodeOsPathsUpdated
 		// and ForgetPeer.
 		cacheNodesInfo nodesinfo.M
 
@@ -346,7 +346,7 @@ func (t *Manager) startSubscriptions() {
 	sub.AddFilter(&msgbus.NodeOsPathsUpdated{}, pubsub.Label{"from", "peer"})
 	sub.AddFilter(&msgbus.NodeRejoin{}, t.labelLocalhost)
 	sub.AddFilter(&msgbus.NodeStatusGenUpdates{}, t.labelLocalhost)
-	sub.AddFilter(&msgbus.NodeStatusLabelsUpdated{}, pubsub.Label{"from", "peer"})
+	sub.AddFilter(&msgbus.NodeLabelsUpdated{}, pubsub.Label{"from", "peer"})
 	sub.AddFilter(&msgbus.SetNodeMonitor{})
 	sub.Start()
 	t.sub = sub
@@ -468,8 +468,8 @@ func (t *Manager) worker() {
 				t.onNodeFrozenFileRemoved(c)
 			case *msgbus.NodeFrozenFileUpdated:
 				t.onNodeFrozenFileUpdated(c)
-			case *msgbus.NodeStatusLabelsUpdated:
-				t.onPeerNodeStatusLabelsUpdated(c)
+			case *msgbus.NodeLabelsUpdated:
+				t.onPeerNodeLabelsUpdated(c)
 			case *msgbus.NodeStatusGenUpdates:
 				t.onNodeStatusGenUpdates(c)
 			case *msgbus.LeaveRequest:
@@ -706,14 +706,14 @@ func (t *Manager) onPeerNodeOsPathsUpdated(m *msgbus.NodeOsPathsUpdated) {
 	t.saveNodesInfo()
 }
 
-func (t *Manager) onPeerNodeStatusLabelsUpdated(m *msgbus.NodeStatusLabelsUpdated) {
+func (t *Manager) onPeerNodeLabelsUpdated(m *msgbus.NodeLabelsUpdated) {
 	peerNodeInfo := t.cacheNodesInfo[m.Node]
 	changed := !maps.Equal(peerNodeInfo.Labels, m.Value)
 	peerNodeInfo.Labels = m.Value
 	t.cacheNodesInfo[m.Node] = peerNodeInfo
 	t.saveNodesInfo()
 	if changed {
-		t.publisher.Pub(&msgbus.NodeStatusLabelsCommited{Node: m.Node, Value: m.Value.DeepCopy()}, t.labelLocalhost)
+		t.publisher.Pub(&msgbus.NodeLabelsCommited{Node: m.Node, Value: m.Value.DeepCopy()}, t.labelLocalhost)
 	}
 }
 
@@ -733,7 +733,7 @@ func (t *Manager) saveNodesInfo() {
 	if err := nodesinfo.Save(t.cacheNodesInfo); err != nil {
 		t.log.Errorf("save nodes info: %s", err)
 	} else {
-		t.log.Infof("nodes info cache refreshed %s", t.cacheNodesInfo.Keys())
+		t.log.Infof("saved nodes info %s", t.cacheNodesInfo.Keys())
 	}
 }
 
@@ -768,10 +768,10 @@ func (t *Manager) loadConfig() error {
 	if err != nil {
 		return err
 	}
-	localNodeInfo := t.cacheNodesInfo[t.localhost]
-	localNodeInfo.Labels = n.Labels()
 	t.config = n.MergedConfig()
 	t.nodeConfig = t.getNodeConfig()
+	localNodeInfo := t.cacheNodesInfo[t.localhost]
+	localNodeInfo.Labels = t.nodeConfig.Labels
 	localNodeInfo.Env = t.nodeConfig.Env
 
 	if lsnr := daemonsubsystem.DataListener.Get(t.localhost); lsnr != nil {
@@ -788,40 +788,43 @@ func (t *Manager) loadConfigAndPublish() error {
 		return err
 	}
 
-	if !prevNodeConfig.Equals(t.nodeConfig) {
-		node.ConfigData.Set(t.localhost, t.nodeConfig.DeepCopy())
-		t.publisher.Pub(&msgbus.NodeConfigUpdated{Node: t.localhost, Value: t.nodeConfig}, t.labelLocalhost)
-	}
-
 	if stats := node.StatsData.GetByNode(t.localhost); stats != nil && stats.MemTotalMB != 0 {
 		t.updateIsOverloaded(*stats)
 	}
 
 	var labelsChanged, pathsChanged bool
-
 	localNodeInfo := t.cacheNodesInfo[t.localhost]
-	if !maps.Equal(localNodeInfo.Labels, t.nodeStatus.Labels) {
-		t.nodeStatus.Labels = localNodeInfo.Labels
+
+	if diff := xmap.Diff(prevNodeConfig.Labels, t.nodeConfig.Labels); diff != "" {
 		labelsChanged = true
+		t.log.Infof("labels changed: %s", diff)
 	}
 	paths := node.OsPathsData.GetByNode(t.localhost)
-	if paths == nil || !slices.Equal(localNodeInfo.Paths, *paths) {
+	if paths == nil {
+		paths = &san.Paths{}
+	}
+	if diff := paths.Diff(localNodeInfo.Paths); diff != "" {
 		node.OsPathsData.Set(t.localhost, localNodeInfo.Paths.DeepCopy())
 		pathsChanged = true
+		t.log.Infof("paths changed: %s", diff)
 	}
 	if labelsChanged || pathsChanged {
 		t.saveNodesInfo()
 	}
+	if !prevNodeConfig.Equals(t.nodeConfig) {
+		node.ConfigData.Set(t.localhost, t.nodeConfig.DeepCopy())
+		t.publisher.Pub(&msgbus.NodeConfigUpdated{Node: t.localhost, Value: t.nodeConfig}, t.labelLocalhost)
+	}
+
 	if labelsChanged {
-		t.publisher.Pub(&msgbus.NodeStatusLabelsUpdated{Node: t.localhost, Value: localNodeInfo.Labels.DeepCopy()}, t.labelLocalhost)
-		t.publisher.Pub(&msgbus.NodeStatusLabelsCommited{Node: t.localhost, Value: localNodeInfo.Labels.DeepCopy()}, t.labelLocalhost)
+		t.publisher.Pub(&msgbus.NodeLabelsUpdated{Node: t.localhost, Value: localNodeInfo.Labels.DeepCopy()}, t.labelLocalhost)
+		t.publisher.Pub(&msgbus.NodeLabelsCommited{Node: t.localhost, Value: localNodeInfo.Labels.DeepCopy()}, t.labelLocalhost)
 	}
 	if pathsChanged {
 		t.publisher.Pub(&msgbus.NodeOsPathsUpdated{Node: t.localhost, Value: *localNodeInfo.Paths.DeepCopy()}, t.labelLocalhost)
 	}
 
 	t.updateSpeaker()
-	t.publishNodeStatus()
 
 	select {
 	case t.poolC <- nil:

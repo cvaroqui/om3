@@ -847,16 +847,17 @@ type NodeActionAccepted struct {
 
 // NodeConfig defines model for NodeConfig.
 type NodeConfig struct {
-	Env                    string        `json:"env"`
-	MaintenanceGracePeriod time.Duration `json:"maintenance_grace_period"`
-	MaxParallel            int           `json:"max_parallel"`
-	MinAvailMemPct         int           `json:"min_avail_mem_pct"`
-	MinAvailSwapPct        int           `json:"min_avail_swap_pct"`
-	PRKey                  string        `json:"prkey"`
-	ReadyPeriod            time.Duration `json:"ready_period"`
-	RejoinGracePeriod      time.Duration `json:"rejoin_grace_period"`
-	SplitAction            string        `json:"split_action"`
-	SSHKey                 string        `json:"sshkey"`
+	Env                    string            `json:"env"`
+	Labels                 map[string]string `json:"labels"`
+	MaintenanceGracePeriod time.Duration     `json:"maintenance_grace_period"`
+	MaxParallel            int               `json:"max_parallel"`
+	MinAvailMemPct         int               `json:"min_avail_mem_pct"`
+	MinAvailSwapPct        int               `json:"min_avail_swap_pct"`
+	PRKey                  string            `json:"prkey"`
+	ReadyPeriod            time.Duration     `json:"ready_period"`
+	RejoinGracePeriod      time.Duration     `json:"rejoin_grace_period"`
+	SplitAction            string            `json:"split_action"`
+	SSHKey                 string            `json:"sshkey"`
 }
 
 // NodeInfo defines model for NodeInfo.
@@ -932,7 +933,6 @@ type NodeStatus struct {
 	Gen          map[string]uint64           `json:"gen"`
 	IsLeader     bool                        `json:"is_leader"`
 	IsOverloaded bool                        `json:"is_overloaded"`
-	Labels       map[string]string           `json:"labels"`
 }
 
 // NodesInfo defines model for NodesInfo.

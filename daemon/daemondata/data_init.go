@@ -83,6 +83,7 @@ func newNodeData(localNode string) node.Node {
 	nodeStatus := node.Node{
 		Config: node.Config{
 			// use initial default value
+			Labels:          label.M{},
 			MaxParallel:     object.DefaultNodeMaxParallel,
 			MinAvailMemPct:  0,
 			MinAvailSwapPct: 0,
@@ -103,7 +104,6 @@ func newNodeData(localNode string) node.Node {
 			Compat:   12,
 			FrozenAt: frozen,
 			Gen:      node.Gen{localNode: 1},
-			Labels:   label.M{},
 		},
 		Os: node.Os{
 			Paths: san.Paths{},

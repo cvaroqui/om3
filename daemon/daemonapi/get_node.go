@@ -42,6 +42,7 @@ func (a *DaemonAPI) GetNodes(ctx echo.Context, params api.GetNodesParams) error 
 		if config.Value != nil {
 			d.Data.Config = &api.NodeConfig{
 				Env:                    config.Value.Env,
+				Labels:                 make(map[string]string),
 				MaintenanceGracePeriod: config.Value.MaintenanceGracePeriod,
 				MaxParallel:            config.Value.MaxParallel,
 				MinAvailMemPct:         config.Value.MinAvailMemPct,
@@ -51,6 +52,9 @@ func (a *DaemonAPI) GetNodes(ctx echo.Context, params api.GetNodesParams) error 
 				ReadyPeriod:            config.Value.ReadyPeriod,
 				RejoinGracePeriod:      config.Value.RejoinGracePeriod,
 				SplitAction:            config.Value.SplitAction,
+			}
+			for k, v := range config.Value.Labels {
+				d.Data.Config.Labels[k] = v
 			}
 		}
 		if status != nil {
@@ -63,7 +67,6 @@ func (a *DaemonAPI) GetNodes(ctx echo.Context, params api.GetNodesParams) error 
 				Gen:          make(map[string]uint64),
 				IsLeader:     status.IsLeader,
 				IsOverloaded: status.IsOverloaded,
-				Labels:       make(map[string]string),
 			}
 			for k, v := range status.Arbitrators {
 				d.Data.Status.Arbitrators[k] = api.ArbitratorStatus{
@@ -74,9 +77,6 @@ func (a *DaemonAPI) GetNodes(ctx echo.Context, params api.GetNodesParams) error 
 			}
 			for k, v := range status.Gen {
 				d.Data.Status.Gen[k] = v
-			}
-			for k, v := range status.Labels {
-				d.Data.Status.Labels[k] = v
 			}
 		}
 		if monitor != nil {

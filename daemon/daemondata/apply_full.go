@@ -113,17 +113,31 @@ func (d *data) pubMsgFromNodeConfigDiffForNode(peer string) {
 	prevTime, hasPrev = d.previousRemoteInfo[peer]
 	prev = prevTime.nodeConfig
 	onUpdate := func() {
-		if !reflect.DeepEqual(prev, next) {
+		var changed bool
+		if !reflect.DeepEqual(prev.Labels, next.Labels) {
+			d.publisher.Pub(&msgbus.NodeLabelsUpdated{Node: peer, Value: next.Labels.DeepCopy()},
+				pubsub.Label{"node", peer},
+				labelFromPeer,
+			)
+			changed = true
+		}
+		if changed || !reflect.DeepEqual(prev, next) {
 			node.ConfigData.Set(peer, next.DeepCopy())
 			d.publisher.Pub(&msgbus.NodeConfigUpdated{Node: peer, Value: *next.DeepCopy()},
 				pubsub.Label{"node", peer},
+				// why not labelFromPeer ?
 			)
 		}
 	}
 	onCreate := func() {
+		d.publisher.Pub(&msgbus.NodeLabelsUpdated{Node: peer, Value: next.Labels.DeepCopy()},
+			pubsub.Label{"node", peer},
+			labelFromPeer,
+		)
 		node.ConfigData.Set(peer, next.DeepCopy())
 		d.publisher.Pub(&msgbus.NodeConfigUpdated{Node: peer, Value: *next.DeepCopy()},
 			pubsub.Label{"node", peer},
+			// why not labelFromPeer ?
 		)
 	}
 
@@ -189,18 +203,12 @@ func (d *data) pubMsgFromNodeStatusDiffForNode(peer string) {
 		labelFromPeer,
 	}
 	onUpdate := func() {
-		var changed bool
-		if !reflect.DeepEqual(prev.Labels, next.Labels) {
-			d.publisher.Pub(&msgbus.NodeStatusLabelsUpdated{Node: peer, Value: next.Labels.DeepCopy()}, labels...)
-			changed = true
-		}
-		if changed || !reflect.DeepEqual(prev, next) {
+		if !reflect.DeepEqual(prev, next) {
 			node.StatusData.Set(peer, next.DeepCopy())
 			d.publisher.Pub(&msgbus.NodeStatusUpdated{Node: peer, Value: *next.DeepCopy()}, labels...)
 		}
 	}
 	onCreate := func() {
-		d.publisher.Pub(&msgbus.NodeStatusLabelsUpdated{Node: peer, Value: next.Labels.DeepCopy()}, labels...)
 		node.StatusData.Set(peer, next.DeepCopy())
 		d.publisher.Pub(&msgbus.NodeStatusUpdated{Node: peer, Value: *next.DeepCopy()}, labels...)
 	}

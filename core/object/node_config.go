@@ -176,7 +176,3 @@ func (t *Node) CNIPlugins() (string, error) {
 		return s.(string), nil
 	}
 }
-
-func (t *Node) Labels() map[string]string {
-	return t.config.SectionMap("labels")
-}

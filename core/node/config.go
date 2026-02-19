@@ -1,14 +1,17 @@
 package node
 
 import (
+	"maps"
 	"time"
 
 	"github.com/opensvc/om3/v3/core/schedule"
+	"github.com/opensvc/om3/v3/util/label"
 )
 
 type (
 	Config struct {
 		Env                    string            `json:"env"`
+		Labels                 label.M           `json:"labels"`
 		MaintenanceGracePeriod time.Duration     `json:"maintenance_grace_period"`
 		MaxParallel            int               `json:"max_parallel"`
 		MaxKeySize             int64             `json:"max_key_size"`
@@ -26,6 +29,7 @@ type (
 func (cfg *Config) DeepCopy() *Config {
 	newCfg := *cfg
 	newCfg.Schedules = append([]schedule.Config{}, cfg.Schedules...)
+	newCfg.Labels = cfg.Labels.DeepCopy()
 	return &newCfg
 
 }
@@ -42,6 +46,10 @@ func (c Config) Equals(other Config) bool {
 		c.SplitAction != other.SplitAction ||
 		c.SSHKey != other.SSHKey ||
 		c.PRKey != other.PRKey {
+		return false
+	}
+
+	if !maps.Equal(c.Labels, other.Labels) {
 		return false
 	}
 

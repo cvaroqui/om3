@@ -6077,6 +6077,7 @@ components:
       type: object
       required:
         - env
+        - labels
         - maintenance_grace_period
         - max_parallel
         - min_avail_mem_pct
@@ -6089,6 +6090,9 @@ components:
       properties:
         env:
           type: string
+        labels:
+          additionalProperties:
+            type: string
         maintenance_grace_period:
           x-go-type: time.Duration
         max_parallel:
@@ -6243,7 +6247,6 @@ components:
         - gen
         - is_leader
         - is_overloaded
-        - labels
       properties:
         agent:
           type: string
@@ -6268,9 +6271,6 @@ components:
           type: boolean
         is_overloaded:
           type: boolean
-        labels:
-          additionalProperties:
-            type: string
 
     NodesInfo:
       x-go-type: nodesinfo.M

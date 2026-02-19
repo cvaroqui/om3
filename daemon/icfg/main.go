@@ -159,7 +159,7 @@ func (t *Manager) startSubscriptions() {
 		// the scope value may depend on cluster nodes values: *, clusternodes ...
 		// so we must also watch for cluster config updates to configFileCheckRefresh non cluster instance config scope
 		t.sub.AddFilter(&msgbus.InstanceConfigUpdated{}, labelPathCluster, labelLocalhost)
-		t.sub.AddFilter(&msgbus.NodeStatusLabelsCommited{})
+		t.sub.AddFilter(&msgbus.NodeLabelsCommited{})
 	} else {
 		// Special note for cluster instance config: we don't subscribe for ConfigFileUpdated, instead we subscribe for
 		// ClusterConfigUpdated.
@@ -199,8 +199,8 @@ func (t *Manager) worker() {
 				t.onConfigFileUpdated()
 			case *msgbus.InstanceConfigUpdated:
 				t.onLocalClusterInstanceConfigUpdated()
-			case *msgbus.NodeStatusLabelsCommited:
-				t.onNodeStatusLabelsCommited()
+			case *msgbus.NodeLabelsCommited:
+				t.onNodeLabelsCommited()
 			}
 		}
 	}
@@ -219,22 +219,22 @@ func (t *Manager) configFileCheckRefresh(force bool) error {
 }
 
 func (t *Manager) onClusterConfigUpdated() {
-	t.log.Infof("cluster config updated => refresh")
+	t.log.Tracef("cluster config updated => refresh")
 	_ = t.configFileCheckRefresh(true)
 }
 
 func (t *Manager) onConfigFileUpdated() {
-	t.log.Infof("config file updated => refresh if csum changed")
+	t.log.Tracef("config file updated => refresh if csum changed")
 	_ = t.configFileCheckRefresh(false)
 }
 
 func (t *Manager) onLocalClusterInstanceConfigUpdated() {
-	t.log.Infof("cluster instance config changed => refresh")
+	t.log.Tracef("cluster instance config changed => refresh")
 	_ = t.configFileCheckRefresh(true)
 }
 
-func (t *Manager) onNodeStatusLabelsCommited() {
-	t.log.Infof("node labels changed => refresh")
+func (t *Manager) onNodeLabelsCommited() {
+	t.log.Tracef("node labels changed => refresh")
 	_ = t.configFileCheckRefresh(true)
 }
 
