@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/opensvc/om3/v3/core/collector"
 	"github.com/opensvc/om3/v3/core/schedule"
 	"github.com/opensvc/om3/v3/util/flatten"
 	"github.com/opensvc/om3/v3/util/label"
@@ -14,6 +15,7 @@ import (
 
 type (
 	Config struct {
+		Collector              *collector.Config `json:"collector,omitempty"`
 		Env                    string            `json:"env"`
 		Hooks                  Hooks             `json:"hooks"`
 		Labels                 label.M           `json:"labels"`
@@ -44,6 +46,7 @@ func (cfg *Config) DeepCopy() *Config {
 	newCfg.Schedules = append([]schedule.Config{}, cfg.Schedules...)
 	newCfg.Labels = cfg.Labels.DeepCopy()
 	newCfg.Hooks = cfg.Hooks.DeepCopy()
+	newCfg.Collector = cfg.Collector.DeepCopy()
 	return &newCfg
 
 }
@@ -63,6 +66,9 @@ func (c Config) Equal(other Config) bool {
 		return false
 	}
 
+	if !c.Collector.Equal(other.Collector) {
+		return false
+	}
 	if !maps.Equal(c.Labels, other.Labels) {
 		return false
 	}
@@ -89,6 +95,14 @@ func (c Config) Equal(other Config) bool {
 	return true
 }
 
+func (t Hooks) DeepCopy() Hooks {
+	l := make(Hooks, len(t))
+	for i, hook := range t {
+		l[i] = *hook.DeepCopy()
+	}
+	return l
+}
+
 func (t *Hook) Equal(o *Hook) bool {
 	if t.Name != o.Name {
 		return false
@@ -98,14 +112,6 @@ func (t *Hook) Equal(o *Hook) bool {
 		return false
 	}
 	return true
-}
-
-func (t Hooks) DeepCopy() Hooks {
-	l := make(Hooks, len(t))
-	for i, hook := range t {
-		l[i] = *hook.DeepCopy()
-	}
-	return l
 }
 
 func (t *Hook) DeepCopy() *Hook {

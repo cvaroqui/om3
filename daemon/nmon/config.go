@@ -83,6 +83,7 @@ func (t *Manager) getNodeConfig() node.Config {
 		for _, e := range node.Schedules() {
 			cfg.Schedules = append(cfg.Schedules, e.Config)
 		}
+		cfg.Collector = node.CollectorRawConfig().AsConfig()
 	}
 
 	return cfg

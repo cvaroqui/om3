@@ -213,10 +213,12 @@ func New(ctx context.Context, subQS pubsub.QueueSizer, opts ...funcopt.O) *T {
 	return t
 }
 
-func (t *T) setNodeFeedClient() error {
-	if node, err := object.NewNode(); err != nil {
-		return err
-	} else if client, err := node.CollectorFeedClient(); err != nil {
+func (t *T) setNodeFeedClient(c *collector.Config) error {
+	if c == nil {
+		t.feedClient = nil
+		return nil
+	} else if client, err := c.NewFeedClient(); err != nil {
+		t.feedClient = nil
 		return err
 	} else {
 		t.feedClient = client
@@ -225,16 +227,18 @@ func (t *T) setNodeFeedClient() error {
 	}
 }
 
-func (t *T) setupRequester() error {
+func (t *T) setupRequester(c *collector.Config) error {
 	// TODO: pickup dbopensvc, auth, insecure from config update message
 	//       to create requester from core/collector.NewRequester
 	t.status.ConfiguredAt = time.Now()
-	if node, err := object.NewNode(); err != nil {
+	if c == nil {
 		t.client = nil
-		return err
-	} else if cli, err := node.CollectorFeeder(); err != nil {
+		t.disable = true
+		t.status.Url = ""
+		return nil
+	} else if cli, err := c.NewFeedRequester(); err != nil {
 		t.client = nil
-		if errors.Is(err, object.ErrNodeCollectorConfig) {
+		if errors.Is(err, collector.ErrConfig) {
 			t.disable = true
 			t.status.Url = ""
 			err = nil
@@ -260,9 +264,12 @@ func (t *T) Start(ctx context.Context) error {
 	t.publisher = pubsub.PubFromContext(t.ctx)
 
 	t.wg.Add(1)
+
+	initialNodeConfig := node.ConfigData.GetByNode(t.localhost)
+
 	go func(errC chan<- error) {
 		defer t.wg.Done()
-		if err := t.setNodeFeedClient(); err != nil {
+		if err := t.setNodeFeedClient(initialNodeConfig.Collector); err != nil {
 			t.log.Infof("the collector routine is dormant: %s", err)
 		} else {
 			t.log.Infof("feeding %s", t.feedClient)
@@ -270,7 +277,7 @@ func (t *T) Start(ctx context.Context) error {
 			t.feedPinger.Start(t.ctx, FeedPingerInterval)
 			defer t.feedPinger.Stop()
 		}
-		if err := t.setupRequester(); err != nil {
+		if err := t.setupRequester(initialNodeConfig.Collector); err != nil {
 			t.log.Errorf("can't setup requester: %s", err)
 		}
 		errC <- nil

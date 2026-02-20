@@ -54,6 +54,14 @@ func (a *DaemonAPI) GetNodes(ctx echo.Context, params api.GetNodesParams) error 
 				RejoinGracePeriod:      config.Value.RejoinGracePeriod,
 				SplitAction:            config.Value.SplitAction,
 			}
+			if c := config.Value.Collector; c != nil {
+				d.Data.Config.Collector = &api.NodeConfigCollector{
+					FeederUrl: c.FeederUrl,
+					Insecure:  c.Insecure,
+					ServerUrl: c.ServerUrl,
+					Timeout:   c.Timeout,
+				}
+			}
 			for i, hook := range config.Value.Hooks {
 				d.Data.Config.Hooks[i] = api.NodeConfigHook{
 					Name:    hook.Name,

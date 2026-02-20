@@ -6089,6 +6089,8 @@ components:
         - sshkey
         - prkey
       properties:
+        collector:
+          $ref: '#/components/schemas/NodeConfigCollector'
         env:
           type: string
         hooks:
@@ -6119,6 +6121,23 @@ components:
           type: string
           x-go-name: PRKey
 
+    NodeConfigCollector:
+      type: object
+      required:
+        - feeder_url
+        - insecure
+        - server_url
+        - timeout
+      properties:
+        feeder_url:
+          type: string
+        insecure:
+          type: boolean
+        server_url:
+          type: string
+        timeout:
+          x-go-type: time.Duration
+
     NodeConfigHook:
       type: object
       required:
@@ -6136,6 +6155,7 @@ components:
             type: string
         name:
           type: string
+
     NodeInfo:
       type: object
       required:

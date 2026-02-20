@@ -847,18 +847,27 @@ type NodeActionAccepted struct {
 
 // NodeConfig defines model for NodeConfig.
 type NodeConfig struct {
-	Env                    string            `json:"env"`
-	Hooks                  []NodeConfigHook  `json:"hooks"`
-	Labels                 map[string]string `json:"labels"`
-	MaintenanceGracePeriod time.Duration     `json:"maintenance_grace_period"`
-	MaxParallel            int               `json:"max_parallel"`
-	MinAvailMemPct         int               `json:"min_avail_mem_pct"`
-	MinAvailSwapPct        int               `json:"min_avail_swap_pct"`
-	PRKey                  string            `json:"prkey"`
-	ReadyPeriod            time.Duration     `json:"ready_period"`
-	RejoinGracePeriod      time.Duration     `json:"rejoin_grace_period"`
-	SplitAction            string            `json:"split_action"`
-	SSHKey                 string            `json:"sshkey"`
+	Collector              *NodeConfigCollector `json:"collector,omitempty"`
+	Env                    string               `json:"env"`
+	Hooks                  []NodeConfigHook     `json:"hooks"`
+	Labels                 map[string]string    `json:"labels"`
+	MaintenanceGracePeriod time.Duration        `json:"maintenance_grace_period"`
+	MaxParallel            int                  `json:"max_parallel"`
+	MinAvailMemPct         int                  `json:"min_avail_mem_pct"`
+	MinAvailSwapPct        int                  `json:"min_avail_swap_pct"`
+	PRKey                  string               `json:"prkey"`
+	ReadyPeriod            time.Duration        `json:"ready_period"`
+	RejoinGracePeriod      time.Duration        `json:"rejoin_grace_period"`
+	SplitAction            string               `json:"split_action"`
+	SSHKey                 string               `json:"sshkey"`
+}
+
+// NodeConfigCollector defines model for NodeConfigCollector.
+type NodeConfigCollector struct {
+	FeederUrl string        `json:"feeder_url"`
+	Insecure  bool          `json:"insecure"`
+	ServerUrl string        `json:"server_url"`
+	Timeout   time.Duration `json:"timeout"`
 }
 
 // NodeConfigHook defines model for NodeConfigHook.
