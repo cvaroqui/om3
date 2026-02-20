@@ -8,7 +8,6 @@ import (
 	"github.com/opensvc/om3/v3/core/collector"
 	"github.com/opensvc/om3/v3/core/instance"
 	"github.com/opensvc/om3/v3/core/naming"
-	"github.com/opensvc/om3/v3/core/object"
 	"github.com/opensvc/om3/v3/daemon/msgbus"
 )
 
@@ -40,32 +39,6 @@ func (t *T) onClusterConfigUpdated(c *msgbus.ClusterConfigUpdated) {
 	for _, nodename := range c.NodesRemoved {
 		delete(t.clusterNode, nodename)
 	}
-}
-
-func (t *T) onConfigUpdated() {
-	t.log.Tracef("reconfigure")
-	if collector.Alive.Load() {
-		t.log.Infof("disable collector clients")
-		collector.Alive.Store(false)
-	}
-	err := t.setNodeFeedClient()
-	if t.feedPinger != nil {
-		t.feedPinger.Stop()
-	}
-	if err := t.setupRequester(); err != nil {
-		if !errors.Is(err, object.ErrNodeCollectorConfig) {
-			t.log.Errorf("can't setup requester: %s", err)
-		}
-	}
-	if err != nil {
-		t.log.Infof("the collector routine is dormant: %s", err)
-	} else {
-		t.log.Infof("feeding %s", t.feedClient)
-		t.feedPinger = t.feedClient.NewPinger()
-		time.Sleep(time.Microsecond * 10)
-		t.feedPinger.Start(t.ctx, FeedPingerInterval)
-	}
-	t.publishOnChange(t.getState())
 }
 
 func (t *T) onInstanceConfigDeleted(c *msgbus.InstanceConfigDeleted) {
@@ -145,7 +118,29 @@ func (t *T) onInstanceStatusUpdated(c *msgbus.InstanceStatusUpdated) {
 }
 
 func (t *T) onNodeConfigUpdated(c *msgbus.NodeConfigUpdated) {
-	t.onConfigUpdated()
+	t.log.Tracef("reconfigure")
+	if collector.Alive.Load() {
+		t.log.Infof("disable collector clients")
+		collector.Alive.Store(false)
+	}
+	err := t.setNodeFeedClient(c.Value.Collector)
+	if t.feedPinger != nil {
+		t.feedPinger.Stop()
+	}
+	if err := t.setupRequester(c.Value.Collector); err != nil {
+		if !errors.Is(err, collector.ErrConfig) {
+			t.log.Errorf("can't setup requester: %s", err)
+		}
+	}
+	if err != nil {
+		t.log.Infof("the collector routine is dormant: %s", err)
+	} else {
+		t.log.Infof("feeding %s", t.feedClient)
+		t.feedPinger = t.feedClient.NewPinger()
+		time.Sleep(time.Microsecond * 10)
+		t.feedPinger.Start(t.ctx, FeedPingerInterval)
+	}
+	t.publishOnChange(t.getState())
 }
 
 func (t *T) onNodeMonitorDeleted(c *msgbus.NodeMonitorDeleted) {

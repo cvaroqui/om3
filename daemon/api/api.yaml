@@ -6077,6 +6077,8 @@ components:
       type: object
       required:
         - env
+        - hooks
+        - labels
         - maintenance_grace_period
         - max_parallel
         - min_avail_mem_pct
@@ -6087,8 +6089,17 @@ components:
         - sshkey
         - prkey
       properties:
+        collector:
+          $ref: '#/components/schemas/NodeConfigCollector'
         env:
           type: string
+        hooks:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeConfigHook'
+        labels:
+          additionalProperties:
+            type: string
         maintenance_grace_period:
           x-go-type: time.Duration
         max_parallel:
@@ -6109,6 +6120,41 @@ components:
         prkey:
           type: string
           x-go-name: PRKey
+
+    NodeConfigCollector:
+      type: object
+      required:
+        - feeder_url
+        - insecure
+        - server_url
+        - timeout
+      properties:
+        feeder_url:
+          type: string
+        insecure:
+          type: boolean
+        server_url:
+          type: string
+        timeout:
+          x-go-type: time.Duration
+
+    NodeConfigHook:
+      type: object
+      required:
+        - command
+        - events
+        - name
+      properties:
+        command:
+          type: array
+          items:
+            type: string
+        events:
+          type: array
+          items:
+            type: string
+        name:
+          type: string
 
     NodeInfo:
       type: object
@@ -6243,7 +6289,6 @@ components:
         - gen
         - is_leader
         - is_overloaded
-        - labels
       properties:
         agent:
           type: string
@@ -6268,9 +6313,6 @@ components:
           type: boolean
         is_overloaded:
           type: boolean
-        labels:
-          additionalProperties:
-            type: string
 
     NodesInfo:
       x-go-type: nodesinfo.M
@@ -7438,7 +7480,6 @@ components:
         - key
         - max_parallel
         - last_run_at
-        - statefile_key
         - next_run_at
         - require
         - require_collector
@@ -7453,8 +7494,6 @@ components:
         last_run_at:
           type: string
           format: date-time
-        statefile_key:
-          type: string
         max_parallel:
           type: integer
         next_run_at:
@@ -7473,7 +7512,6 @@ components:
         - action
         - schedule
         - key
-        - statefile_key
         - max_parallel
         - require
         - require_collector
@@ -7484,8 +7522,6 @@ components:
         schedule:
           type: string
         key:
-          type: string
-        statefile_key:
           type: string
         max_parallel:
           type: integer

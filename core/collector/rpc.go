@@ -3,6 +3,7 @@ package collector
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -14,6 +15,7 @@ import (
 	"github.com/ybbus/jsonrpc"
 
 	"github.com/opensvc/om3/v3/util/hostname"
+	"github.com/opensvc/om3/v3/util/httphelper"
 	"github.com/opensvc/om3/v3/util/plog"
 )
 
@@ -186,13 +188,24 @@ func BaseURL(s string) (*url.URL, error) {
 	return u, nil
 }
 
+func (c *Config) NewFeedRequester() (*httphelper.T, error) {
+	if c.FeederUrl == "" {
+		return nil, ErrConfig
+	} else if c.Password == "" {
+		return nil, ErrUnregistered
+	}
+
+	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(hostname.Hostname()+":"+c.Password))
+	return NewRequester(c.FeederUrl, auth, c.Insecure)
+}
+
 // NewFeedClient returns a Client to call the collector feed app jsonrpc2 methods.
-func NewFeedClient(endpoint, secret string) (*Client, error) {
-	u, err := FeedURL(endpoint)
+func (c *Config) NewFeedClient() (*Client, error) {
+	u, err := FeedURL(c.FeederUrl)
 	if err != nil {
 		return nil, err
 	}
-	return newClient(u, secret)
+	return newClient(u, c.Password)
 }
 
 // NewComplianceClient returns a Client to call the collector init app jsonrpc2 methods.

@@ -5,7 +5,6 @@ import (
 
 	"github.com/opensvc/om3/v3/core/instance"
 	"github.com/opensvc/om3/v3/core/status"
-	"github.com/opensvc/om3/v3/util/label"
 )
 
 type (
@@ -18,7 +17,6 @@ type (
 		Gen          Gen                         `json:"gen"`
 		IsLeader     bool                        `json:"is_leader"`
 		IsOverloaded bool                        `json:"is_overloaded"`
-		Labels       label.M                     `json:"labels"`
 		BootedAt     time.Time                   `json:"booted_at"`
 	}
 
@@ -59,7 +57,6 @@ func (t *Status) DeepCopy() *Status {
 		newGen[n] = v
 	}
 	result.Gen = newGen
-	result.Labels = t.Labels.DeepCopy()
 
 	return &result
 }

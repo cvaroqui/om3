@@ -85,7 +85,6 @@ func (t Schedule) Unstructured() map[string]any {
 		"require":             t.Require,
 		"require_collector":   t.RequireCollector,
 		"require_Provisioned": t.RequireProvisioned,
-		"statefile_key":       t.StatefileKey,
 	}
 }
 
@@ -115,9 +114,23 @@ func (t Node) Unstructured() map[string]any {
 	}
 }
 
+func (t *NodeConfigHook) Unstructured() map[string]any {
+	return map[string]any{
+		"command": t.Command,
+		"events":  t.Events,
+		"name":    t.Name,
+	}
+}
+
 func (t *NodeConfig) Unstructured() map[string]any {
+	hooks := make([]any, 0)
+	for _, hook := range t.Hooks {
+		hooks = append(hooks, hook.Unstructured())
+	}
 	return map[string]any{
 		"env":                      t.Env,
+		"hooks":                    hooks,
+		"labels":                   t.Labels,
 		"maintenance_grace_period": t.MaintenanceGracePeriod,
 		"min_avail_mem_pct":        t.MinAvailMemPct,
 		"min_avail_swap_pct":       t.MinAvailSwapPct,
@@ -140,7 +153,6 @@ func (t *NodeStatus) Unstructured() map[string]any {
 		"gen":           t.Gen,
 		"is_leader":     t.IsLeader,
 		"is_overloaded": t.IsOverloaded,
-		"labels":        t.Labels,
 	}
 }
 

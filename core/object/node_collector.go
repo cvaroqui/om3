@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -28,25 +27,12 @@ type (
 		uuid         string
 	}
 
-	CollectorConfig struct {
-		FeederUrl string        `json:"feeder_url"`
-		ServerUrl string        `json:"server_url"`
-		Timeout   time.Duration `json:"timeout"`
-		Insecure  bool          `json:"insecure"`
-
-		// private field
-		password string
-	}
-
 	CollectorProblem struct {
 		text string `json:"text"`
 	}
 )
 
 var (
-	ErrNodeCollectorConfig       = errors.New("collector is not configured: empty configuration keyword node.dbopensvc")
-	ErrNodeCollectorUnregistered = errors.New("this node is not registered. try 'om node register'")
-
 	defaultPostCollectorTimeout = 1 * time.Second
 )
 
@@ -104,23 +90,23 @@ func (t *CollectorConfigRaw) ServerUrl() string {
 	}
 }
 
-func (t *CollectorConfigRaw) AsConfig() *CollectorConfig {
+func (t *CollectorConfigRaw) AsConfig() *collector.Config {
 	var timeout time.Duration
 	if t.timeout != nil {
 		timeout = *t.timeout
 	}
-	return &CollectorConfig{
+	return &collector.Config{
 		FeederUrl: t.FeederUrl(),
 		ServerUrl: t.ServerUrl(),
 		Timeout:   timeout,
 		Insecure:  t.insecure,
-		password:  t.uuid,
+		Password:  t.uuid,
 	}
 }
 
 func (t *Node) CollectorFeedClient() (*collector.Client, error) {
-	collectorCfg := t.CollectorRawConfig().AsConfig()
-	return collector.NewFeedClient(collectorCfg.FeederUrl, collectorCfg.password)
+	cfg := t.CollectorRawConfig().AsConfig()
+	return cfg.NewFeedClient()
 }
 
 func (t Node) CollectorInitClient() (*collector.Client, error) {
@@ -171,11 +157,11 @@ func (t *Node) CollectorClient() (*httphelper.T, error) {
 	pass := t.MergedConfig().GetString(key.Parse("node.uuid"))
 
 	if dbopensvc == "" || dbopensvc == "none" {
-		return nil, ErrNodeCollectorConfig
+		return nil, collector.ErrConfig
 	}
 
 	if dbopensvc != "" && pass == "" {
-		return nil, ErrNodeCollectorUnregistered
+		return nil, collector.ErrUnregistered
 	}
 
 	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(hostname.Hostname()+":"+pass))
@@ -187,12 +173,12 @@ func (t *Node) CollectorFeeder() (*httphelper.T, error) {
 	cfg := t.CollectorRawConfig().AsConfig()
 
 	if cfg.FeederUrl == "" {
-		return nil, ErrNodeCollectorConfig
-	} else if cfg.password == "" {
-		return nil, ErrNodeCollectorUnregistered
+		return nil, collector.ErrConfig
+	} else if cfg.Password == "" {
+		return nil, collector.ErrUnregistered
 	}
 
-	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(hostname.Hostname()+":"+cfg.password))
+	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(hostname.Hostname()+":"+cfg.Password))
 	return collector.NewRequester(cfg.FeederUrl, auth, cfg.Insecure)
 }
 
@@ -201,12 +187,12 @@ func (t *Node) CollectorServer() (*httphelper.T, error) {
 	cfg := t.CollectorRawConfig().AsConfig()
 
 	if cfg.ServerUrl == "" {
-		return nil, ErrNodeCollectorConfig
-	} else if cfg.password == "" {
-		return nil, ErrNodeCollectorUnregistered
+		return nil, collector.ErrConfig
+	} else if cfg.Password == "" {
+		return nil, collector.ErrUnregistered
 	}
 
-	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(hostname.Hostname()+":"+cfg.password))
+	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(hostname.Hostname()+":"+cfg.Password))
 	return collector.NewRequester(cfg.ServerUrl, auth, cfg.Insecure)
 }
 
@@ -215,7 +201,7 @@ func (t *Node) CollectorServerWithAuth(auth string) (*httphelper.T, error) {
 	cfg := t.CollectorRawConfig().AsConfig()
 
 	if cfg.ServerUrl == "" {
-		return nil, ErrNodeCollectorConfig
+		return nil, collector.ErrConfig
 	}
 
 	return collector.NewRequester(cfg.ServerUrl, auth, cfg.Insecure)
@@ -226,7 +212,7 @@ func (t *Node) CollectorServerWithoutAuth() (*httphelper.T, error) {
 	cfg := t.CollectorRawConfig().AsConfig()
 
 	if cfg.ServerUrl == "" {
-		return nil, ErrNodeCollectorConfig
+		return nil, collector.ErrConfig
 	}
 
 	return collector.NewRequester(cfg.ServerUrl, "", cfg.Insecure)

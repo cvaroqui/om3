@@ -34,6 +34,39 @@ type (
 	}
 )
 
+func (t Paths) Diff(other Paths) string {
+	oldSet := make(map[string]any)
+	newSet := make(map[string]any)
+
+	for _, item := range t {
+		oldSet[item.String()] = nil
+	}
+	for _, item := range other {
+		newSet[item.String()] = nil
+	}
+
+	var changes []string
+
+	// Check for added
+	for s := range newSet {
+		if _, exists := oldSet[s]; !exists {
+			changes = append(changes, fmt.Sprintf("+%s", s))
+		}
+	}
+
+	// Check for removed
+	for s := range oldSet {
+		if _, exists := newSet[s]; !exists {
+			changes = append(changes, fmt.Sprintf("-%s", s))
+		}
+	}
+
+	if len(changes) == 0 {
+		return ""
+	}
+	return strings.Join(changes, ", ")
+}
+
 func (t Paths) Mapping() string {
 	return strings.Join(t.MappingList(), ",")
 }
@@ -41,7 +74,7 @@ func (t Paths) Mapping() string {
 func (t Paths) MappingList() []string {
 	l := make([]string, 0)
 	for _, p := range t {
-		s := p.Initiator.Name + ":" + p.Target.Name
+		s := p.String()
 		l = append(l, s)
 	}
 	return l
@@ -208,6 +241,10 @@ func (t Paths) DeepCopy() *Paths {
 		l[i] = p.DeepCopy()
 	}
 	return &l
+}
+
+func (t Path) String() string {
+	return fmt.Sprintf("%s:%s", t.Target.Name, t.Initiator.Name)
 }
 
 func (t Path) DeepCopy() Path {

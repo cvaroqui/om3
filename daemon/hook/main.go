@@ -6,19 +6,16 @@ import (
 	"fmt"
 	"os/exec"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/opensvc/om3/v3/core/event"
-	"github.com/opensvc/om3/v3/core/object"
+	"github.com/opensvc/om3/v3/core/node"
 	"github.com/opensvc/om3/v3/core/xconfig"
 	"github.com/opensvc/om3/v3/daemon/msgbus"
-	"github.com/opensvc/om3/v3/util/command"
 	"github.com/opensvc/om3/v3/util/hostname"
-	"github.com/opensvc/om3/v3/util/key"
 	"github.com/opensvc/om3/v3/util/plog"
 	"github.com/opensvc/om3/v3/util/pubsub"
 	"github.com/opensvc/om3/v3/util/xmap"
@@ -40,17 +37,15 @@ type (
 		sub   *pubsub.Subscription
 		subQS pubsub.QueueSizer
 
-		hooks hooks
+		hooks map[string]hook
 
 		wg sync.WaitGroup
 	}
 
 	hook struct {
-		sig    string
+		node.Hook
 		cancel func()
 	}
-
-	hooks map[string]hook
 )
 
 var (
@@ -79,26 +74,21 @@ func NewManager(drainDuration time.Duration, subQS pubsub.QueueSizer) *Manager {
 		labelLocalhost: pubsub.Label{"node", localhost},
 
 		subQS: subQS,
-		hooks: make(hooks),
+		hooks: make(map[string]hook),
 	}
 }
 
 func (t *Manager) Start(parent context.Context) error {
 	t.log.Infof("starting")
 	t.ctx, t.cancel = context.WithCancel(parent)
-	t.update()
+	initialNodeConfig := node.ConfigData.GetByNode(t.localhost)
+	if initialNodeConfig == nil {
+		return fmt.Errorf("node config not found for localhost: %s", t.localhost)
+	}
+	t.update(initialNodeConfig.Hooks)
 	t.startSubscriptions()
 	t.startUpdateLoop()
 	t.log.Infof("started")
-	return nil
-}
-
-func (t *Manager) loadConfig() error {
-	n, err := object.NewNode(object.WithVolatile(false))
-	if err != nil {
-		return err
-	}
-	t.config = n.MergedConfig()
 	return nil
 }
 
@@ -108,8 +98,11 @@ func (t *Manager) startUpdateLoop() {
 			select {
 			case <-t.ctx.Done():
 				return
-			case <-t.sub.C:
-				t.update()
+			case i := <-t.sub.C:
+				switch ev := i.(type) {
+				case *msgbus.NodeConfigUpdated:
+					t.update(ev.Value.Hooks)
+				}
 			}
 		}
 	}()
@@ -130,28 +123,22 @@ func (t *Manager) Stop() error {
 	return nil
 }
 
-func (t *Manager) update() {
-	if err := t.loadConfig(); err != nil {
-		t.log.Warnf("%s", err)
-		return
-	}
+func (t *Manager) update(hooks []node.Hook) {
 	currentHookNames := xmap.Keys(t.hooks)
 	var hooksToStop, scannedHooks []string
-	hooksToStart := make(map[string]string)
-	for _, name := range t.config.SectionStrings() {
-		if !strings.HasPrefix(name, "hook#") {
-			continue
-		}
+	hooksToStart := make(map[string]node.Hook)
+	for _, h := range hooks {
+		name := h.Name
 		scannedHooks = append(scannedHooks, name)
-		currentHook, ok := t.hooks[name]
+		current, ok := t.hooks[name]
 		if !ok {
-			hooksToStart[name] = ""
+			hooksToStart[name] = h
 			continue
 		}
-		sig := t.config.SectionSig(name)
-		if sig != currentHook.sig {
+		if diff := current.Hook.Diff(h); diff != "" {
+			t.log.Infof("%s: %s", name, diff)
 			hooksToStop = append(hooksToStop, name)
-			hooksToStart[name] = sig
+			hooksToStart[name] = h
 		}
 
 	}
@@ -166,23 +153,16 @@ func (t *Manager) update() {
 		}
 		delete(t.hooks, name)
 	}
-	for name, sig := range hooksToStart {
-		kinds := t.config.GetStrings(key.New(name, "events"))
+	for name, hookToStart := range hooksToStart {
+		kinds := hookToStart.Events
 		h := hook{
-			sig: sig,
+			Hook: hookToStart,
 		}
-		t.hooks[name] = h
-		s := t.config.Get(key.New(name, "command"))
-		args, err := command.CmdArgsFromString(s)
-		if err != nil {
-			t.log.Warnf("%s: failed to split command: %s", name, err)
-			continue
-		}
-		if len(args) < 1 {
+		if len(hookToStart.Command) < 1 {
 			t.log.Warnf("%s: empty command", name)
 			continue
 		}
-		h.cancel = t.startHook(name, kinds, args)
+		h.cancel = t.startHook(name, kinds, hookToStart.Command)
 		t.hooks[name] = h
 	}
 }

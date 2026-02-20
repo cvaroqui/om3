@@ -19,11 +19,11 @@ import (
 	"github.com/opensvc/om3/v3/core/naming"
 	"github.com/opensvc/om3/v3/core/object"
 	"github.com/opensvc/om3/v3/core/objectselector"
-	"github.com/opensvc/om3/v3/core/output"
 	"github.com/opensvc/om3/v3/daemon/api"
 	"github.com/opensvc/om3/v3/daemon/msgbus"
 	"github.com/opensvc/om3/v3/daemon/rbac"
 	"github.com/opensvc/om3/v3/util/converters"
+	"github.com/opensvc/om3/v3/util/flatten"
 	"github.com/opensvc/om3/v3/util/funcopt"
 	"github.com/opensvc/om3/v3/util/pubsub"
 )
@@ -609,7 +609,7 @@ func (f Filter) IsZero() bool {
 }
 
 func (df DataFilters) match(i any) bool {
-	flatten := output.Flatten(i)
+	keys := flatten.Flatten(i)
 
 	intLessOrEqual := func(str1, str2 string) (bool, error) {
 		num1, err1 := strconv.Atoi(str1)
@@ -684,7 +684,7 @@ func (df DataFilters) match(i any) bool {
 	}
 
 	matchDataFilter := func(m DataFilter) bool {
-		s, ok := flatten[m.Key]
+		s, ok := keys[m.Key]
 		if !ok {
 			return false
 		}

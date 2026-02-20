@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/util/jsonpath"
 	"sigs.k8s.io/yaml"
 
+	"github.com/opensvc/om3/v3/util/flatten"
 	"github.com/opensvc/om3/v3/util/render"
 	"github.com/opensvc/om3/v3/util/render/palette"
 	"github.com/opensvc/om3/v3/util/unstructured"
@@ -104,9 +105,9 @@ func (t Renderer) Sprint() (string, error) {
 			panic(err)
 		}
 		if color.NoColor {
-			return sep + SprintFlat(b), nil
+			return sep + flatten.SprintFlat(b), nil
 		} else {
-			return sep + SprintFlatColor(b, t.Colorize), nil
+			return sep + flatten.SprintFlatColor(b, t.Colorize), nil
 		}
 	case JSON:
 		b, err := json.MarshalIndent(t.Data, "", indent)

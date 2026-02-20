@@ -208,9 +208,9 @@ var (
 
 		"NodeStatusGenUpdates": func() any { return &NodeStatusGenUpdates{} },
 
-		"NodeStatusLabelsCommited": func() any { return &NodeStatusLabelsCommited{} },
+		"NodeLabelsCommited": func() any { return &NodeLabelsCommited{} },
 
-		"NodeStatusLabelsUpdated": func() any { return &NodeStatusLabelsUpdated{} },
+		"NodeLabelsUpdated": func() any { return &NodeLabelsUpdated{} },
 
 		"NodeSplitAction": func() any { return &NodeSplitAction{} },
 
@@ -775,13 +775,13 @@ type (
 		Value node.Gen `json:"gens" yaml:"gens"`
 	}
 
-	NodeStatusLabelsCommited struct {
+	NodeLabelsCommited struct {
 		pubsub.Msg `yaml:",inline"`
 		Node       string  `json:"node" yaml:"node"`
 		Value      label.M `json:"node_labels" yaml:"node_labels"`
 	}
 
-	NodeStatusLabelsUpdated struct {
+	NodeLabelsUpdated struct {
 		pubsub.Msg `yaml:",inline"`
 		Node       string  `json:"node" yaml:"node"`
 		Value      label.M `json:"node_labels" yaml:"node_labels"`
@@ -1329,16 +1329,16 @@ func (e *NodeStatusGenUpdates) Key() string {
 	return fmt.Sprintf("NodeStatusGenUpdates,node=%s", e.Node)
 }
 
-func (e *NodeStatusLabelsCommited) Kind() string {
-	return "NodeStatusLabelsCommited"
+func (e *NodeLabelsCommited) Kind() string {
+	return "NodeLabelsCommited"
 }
 
-func (e *NodeStatusLabelsUpdated) Kind() string {
-	return "NodeStatusLabelsUpdated"
+func (e *NodeLabelsUpdated) Kind() string {
+	return "NodeLabelsUpdated"
 }
 
-func (e *NodeStatusLabelsUpdated) Key() string {
-	return fmt.Sprintf("NodeStatusLabelsUpdated,node=%s", e.Node)
+func (e *NodeLabelsUpdated) Key() string {
+	return fmt.Sprintf("NodeLabelsUpdated,node=%s", e.Node)
 }
 
 func (e *NodeStale) Kind() string {

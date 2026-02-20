@@ -201,7 +201,7 @@ func (d *data) setCacheAndPublish(ev event.Event) error {
 	case *msgbus.NodeStatsUpdated:
 		node.StatsData.Set(c.Node, &c.Value)
 		d.publisher.Pub(c, labelFromPeer)
-	case *msgbus.NodeStatusLabelsUpdated:
+	case *msgbus.NodeLabelsUpdated:
 		d.publisher.Pub(c, labelFromPeer)
 	case *msgbus.NodeStatusUpdated:
 		node.StatusData.Set(c.Node, &c.Value)

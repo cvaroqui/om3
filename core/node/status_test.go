@@ -28,10 +28,6 @@ func Test_TStatus_DeepCopy(t *testing.T) {
 		},
 		IsOverloaded: false,
 		IsLeader:     true,
-		Labels: map[string]string{
-			"node1": "abc",
-			"node2": "efg",
-		},
 	}
 
 	copyValue := value.DeepCopy()

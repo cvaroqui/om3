@@ -17,6 +17,7 @@ import (
 	"github.com/opensvc/om3/v3/core/output"
 	"github.com/opensvc/om3/v3/core/rawconfig"
 	"github.com/opensvc/om3/v3/daemon/msgbus"
+	"github.com/opensvc/om3/v3/util/flatten"
 	"github.com/opensvc/om3/v3/util/pubsub"
 )
 
@@ -36,7 +37,7 @@ type (
 		NodeSelector string
 		errC         chan error
 		evC          chan *event.Event
-		diff         *output.Delta
+		diff         *flatten.Delta
 	}
 
 	templateHelper struct {
@@ -156,7 +157,7 @@ func (t *CmdNodeEvents) DoNodes() error {
 		nodenames []string
 	)
 	if t.Output == "diff" {
-		t.diff = output.NewDiff()
+		t.diff = flatten.NewDiff()
 	}
 
 	t.evC = make(chan *event.Event)

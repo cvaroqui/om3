@@ -22,10 +22,11 @@ type (
 		Require            string `json:"require,omitempty"`
 		RequireCollector   bool   `json:"require_collector"`
 		RequireProvisioned bool   `json:"require_provisioned"`
+		RunDir             string `json:"-"`
 
 		// StatefileKey is used in the last run filename and last run success formatters.
 		// Defaults to Action if empty.
-		StatefileKey string `json:"statefile_key,omitempty"`
+		StatefileKey string `json:"-"`
 	}
 
 	Entry struct {
@@ -34,7 +35,6 @@ type (
 		NextRunAt time.Time   `json:"next_run_at"`
 		Node      string      `json:"node"`
 		Path      naming.Path `json:"path"`
-		RunDir    string      `json:"run_dir"`
 	}
 )
 
@@ -114,6 +114,7 @@ func (t Table) DeepCopy() *Table {
 				Require:            x.Require,
 				RequireCollector:   x.RequireCollector,
 				RequireProvisioned: x.RequireProvisioned,
+				RunDir:             x.RunDir,
 				Schedule:           x.Schedule,
 				StatefileKey:       x.StatefileKey,
 			},
@@ -121,7 +122,6 @@ func (t Table) DeepCopy() *Table {
 			NextRunAt: x.NextRunAt,
 			Node:      x.Node,
 			Path:      x.Path,
-			RunDir:    x.RunDir,
 		})
 	}
 	return &r
