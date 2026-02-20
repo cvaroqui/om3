@@ -811,7 +811,7 @@ func (t *Manager) loadConfigAndPublish() error {
 	if labelsChanged || pathsChanged {
 		t.saveNodesInfo()
 	}
-	if !prevNodeConfig.Equals(t.nodeConfig) {
+	if !prevNodeConfig.Equal(t.nodeConfig) {
 		node.ConfigData.Set(t.localhost, t.nodeConfig.DeepCopy())
 		t.publisher.Pub(&msgbus.NodeConfigUpdated{Node: t.localhost, Value: t.nodeConfig}, t.labelLocalhost)
 	}

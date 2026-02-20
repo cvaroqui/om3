@@ -6077,6 +6077,7 @@ components:
       type: object
       required:
         - env
+        - hooks
         - labels
         - maintenance_grace_period
         - max_parallel
@@ -6090,6 +6091,10 @@ components:
       properties:
         env:
           type: string
+        hooks:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeConfigHook'
         labels:
           additionalProperties:
             type: string
@@ -6114,6 +6119,23 @@ components:
           type: string
           x-go-name: PRKey
 
+    NodeConfigHook:
+      type: object
+      required:
+        - command
+        - events
+        - name
+      properties:
+        command:
+          type: array
+          items:
+            type: string
+        events:
+          type: array
+          items:
+            type: string
+        name:
+          type: string
     NodeInfo:
       type: object
       required:

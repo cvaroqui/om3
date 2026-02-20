@@ -115,9 +115,22 @@ func (t Node) Unstructured() map[string]any {
 	}
 }
 
+func (t *NodeConfigHook) Unstructured() map[string]any {
+	return map[string]any{
+		"command": t.Command,
+		"events":  t.Events,
+		"name":    t.Name,
+	}
+}
+
 func (t *NodeConfig) Unstructured() map[string]any {
+	hooks := make([]any, 0)
+	for _, hook := range t.Hooks {
+		hooks = append(hooks, hook.Unstructured())
+	}
 	return map[string]any{
 		"env":                      t.Env,
+		"hooks":                    hooks,
 		"labels":                   t.Labels,
 		"maintenance_grace_period": t.MaintenanceGracePeriod,
 		"min_avail_mem_pct":        t.MinAvailMemPct,

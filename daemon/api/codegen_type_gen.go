@@ -848,6 +848,7 @@ type NodeActionAccepted struct {
 // NodeConfig defines model for NodeConfig.
 type NodeConfig struct {
 	Env                    string            `json:"env"`
+	Hooks                  []NodeConfigHook  `json:"hooks"`
 	Labels                 map[string]string `json:"labels"`
 	MaintenanceGracePeriod time.Duration     `json:"maintenance_grace_period"`
 	MaxParallel            int               `json:"max_parallel"`
@@ -858,6 +859,13 @@ type NodeConfig struct {
 	RejoinGracePeriod      time.Duration     `json:"rejoin_grace_period"`
 	SplitAction            string            `json:"split_action"`
 	SSHKey                 string            `json:"sshkey"`
+}
+
+// NodeConfigHook defines model for NodeConfigHook.
+type NodeConfigHook struct {
+	Command []string `json:"command"`
+	Events  []string `json:"events"`
+	Name    string   `json:"name"`
 }
 
 // NodeInfo defines model for NodeInfo.

@@ -1,16 +1,21 @@
 package node
 
 import (
+	"encoding/json"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/opensvc/om3/v3/core/schedule"
+	"github.com/opensvc/om3/v3/util/flatten"
 	"github.com/opensvc/om3/v3/util/label"
+	"github.com/opensvc/om3/v3/util/xmap"
 )
 
 type (
 	Config struct {
 		Env                    string            `json:"env"`
+		Hooks                  Hooks             `json:"hooks"`
 		Labels                 label.M           `json:"labels"`
 		MaintenanceGracePeriod time.Duration     `json:"maintenance_grace_period"`
 		MaxParallel            int               `json:"max_parallel"`
@@ -24,17 +29,26 @@ type (
 		SSHKey                 string            `json:"sshkey"`
 		PRKey                  string            `json:"prkey"`
 	}
+
+	Hooks []Hook
+
+	Hook struct {
+		Name    string   `json:"name"`
+		Events  []string `json:"events"`
+		Command []string `json:"command"`
+	}
 )
 
 func (cfg *Config) DeepCopy() *Config {
 	newCfg := *cfg
 	newCfg.Schedules = append([]schedule.Config{}, cfg.Schedules...)
 	newCfg.Labels = cfg.Labels.DeepCopy()
+	newCfg.Hooks = cfg.Hooks.DeepCopy()
 	return &newCfg
 
 }
 
-func (c Config) Equals(other Config) bool {
+func (c Config) Equal(other Config) bool {
 	if c.Env != other.Env ||
 		c.MaintenanceGracePeriod != other.MaintenanceGracePeriod ||
 		c.MaxParallel != other.MaxParallel ||
@@ -63,5 +77,52 @@ func (c Config) Equals(other Config) bool {
 		}
 	}
 
+	// Compare Hook slice
+	if len(c.Hooks) != len(other.Hooks) {
+		return false
+	}
+	for i := range c.Hooks {
+		if !c.Hooks[i].Equal(&other.Hooks[i]) {
+			return false
+		}
+	}
 	return true
+}
+
+func (t *Hook) Equal(o *Hook) bool {
+	if t.Name != o.Name {
+		return false
+	} else if !slices.Equal(t.Events, o.Events) {
+		return false
+	} else if !slices.Equal(t.Command, o.Command) {
+		return false
+	}
+	return true
+}
+
+func (t Hooks) DeepCopy() Hooks {
+	l := make(Hooks, len(t))
+	for i, hook := range t {
+		l[i] = *hook.DeepCopy()
+	}
+	return l
+}
+
+func (t *Hook) DeepCopy() *Hook {
+	n := *t
+	n.Events = append([]string{}, t.Events...)
+	n.Command = append([]string{}, t.Command...)
+	return &n
+}
+
+func (t *Hook) Diff(other Hook) string {
+	flattenable := func(hook Hook) map[string]any {
+		var m map[string]any
+		b, _ := json.Marshal(hook)
+		json.Unmarshal(b, &m)
+		return m
+	}
+	m1 := flatten.Flatten(flattenable(*t))
+	m2 := flatten.Flatten(flattenable(other))
+	return xmap.Diff(m1, m2)
 }

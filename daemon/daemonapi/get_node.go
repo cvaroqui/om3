@@ -42,6 +42,7 @@ func (a *DaemonAPI) GetNodes(ctx echo.Context, params api.GetNodesParams) error 
 		if config.Value != nil {
 			d.Data.Config = &api.NodeConfig{
 				Env:                    config.Value.Env,
+				Hooks:                  make([]api.NodeConfigHook, len(config.Value.Hooks)),
 				Labels:                 make(map[string]string),
 				MaintenanceGracePeriod: config.Value.MaintenanceGracePeriod,
 				MaxParallel:            config.Value.MaxParallel,
@@ -52,6 +53,13 @@ func (a *DaemonAPI) GetNodes(ctx echo.Context, params api.GetNodesParams) error 
 				ReadyPeriod:            config.Value.ReadyPeriod,
 				RejoinGracePeriod:      config.Value.RejoinGracePeriod,
 				SplitAction:            config.Value.SplitAction,
+			}
+			for i, hook := range config.Value.Hooks {
+				d.Data.Config.Hooks[i] = api.NodeConfigHook{
+					Name:    hook.Name,
+					Events:  hook.Events,
+					Command: hook.Command,
+				}
 			}
 			for k, v := range config.Value.Labels {
 				d.Data.Config.Labels[k] = v
