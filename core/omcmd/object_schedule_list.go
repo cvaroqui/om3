@@ -79,7 +79,6 @@ func (t *CmdObjectScheduleList) extractLocal(selector string) (api.ScheduleList,
 					RequireCollector:   e.RequireCollector,
 					RequireProvisioned: e.RequireProvisioned,
 					Schedule:           e.Schedule,
-					StatefileKey:       e.StatefileKey,
 				},
 			}
 			data.Items = append(data.Items, item)

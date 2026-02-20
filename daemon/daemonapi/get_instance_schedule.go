@@ -57,7 +57,6 @@ func (a *DaemonAPI) getLocalInstanceSchedule(ctx echo.Context, namespace string,
 				RequireCollector:   e.RequireCollector,
 				RequireProvisioned: e.RequireProvisioned,
 				Schedule:           e.Schedule,
-				StatefileKey:       e.StatefileKey,
 			},
 		}
 		resp.Items = append(resp.Items, item)

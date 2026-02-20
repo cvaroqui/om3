@@ -7460,7 +7460,6 @@ components:
         - key
         - max_parallel
         - last_run_at
-        - statefile_key
         - next_run_at
         - require
         - require_collector
@@ -7475,8 +7474,6 @@ components:
         last_run_at:
           type: string
           format: date-time
-        statefile_key:
-          type: string
         max_parallel:
           type: integer
         next_run_at:
@@ -7495,7 +7492,6 @@ components:
         - action
         - schedule
         - key
-        - statefile_key
         - max_parallel
         - require
         - require_collector
@@ -7506,8 +7502,6 @@ components:
         schedule:
           type: string
         key:
-          type: string
-        statefile_key:
           type: string
         max_parallel:
           type: integer

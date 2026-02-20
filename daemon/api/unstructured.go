@@ -85,7 +85,6 @@ func (t Schedule) Unstructured() map[string]any {
 		"require":             t.Require,
 		"require_collector":   t.RequireCollector,
 		"require_Provisioned": t.RequireProvisioned,
-		"statefile_key":       t.StatefileKey,
 	}
 }
 

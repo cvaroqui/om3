@@ -1564,7 +1564,6 @@ type Schedule struct {
 	RequireCollector   bool      `json:"require_collector"`
 	RequireProvisioned bool      `json:"require_provisioned"`
 	Schedule           string    `json:"schedule"`
-	StatefileKey       string    `json:"statefile_key"`
 }
 
 // ScheduleConfig defines model for ScheduleConfig.
@@ -1576,7 +1575,6 @@ type ScheduleConfig struct {
 	RequireCollector   bool   `json:"require_collector"`
 	RequireProvisioned bool   `json:"require_provisioned"`
 	Schedule           string `json:"schedule"`
-	StatefileKey       string `json:"statefile_key"`
 }
 
 // ScheduleItem defines model for ScheduleItem.
