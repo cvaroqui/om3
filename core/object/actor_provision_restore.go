@@ -2,14 +2,17 @@ package object
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/opensvc/om3/v3/core/backup"
 	"github.com/opensvc/om3/v3/core/resource"
 	"github.com/opensvc/om3/v3/core/status"
 	"github.com/opensvc/om3/v3/core/statusbus"
+	"github.com/opensvc/om3/v3/util/hostname"
 	"github.com/opensvc/om3/v3/util/key"
 )
 
@@ -18,7 +21,16 @@ import (
 type provisionRestore struct {
 	store backup.Driver
 	run   backup.Run
+
+	// attempted says the provision began restoring a head, restored or
+	// not. A provision failing before writes nothing into a head, and
+	// no receipt.
+	attempted bool
 }
+
+// ackTimeout bounds the writing of a receipt, which a provision interrupted
+// still writes.
+const ackTimeout = time.Minute
 
 // provisionRestoreSource returns the snapshot restore_from names, nil when it
 // names none.
@@ -80,8 +92,64 @@ func (t *actor) restoreProvisionedHead(ctx context.Context, src *provisionRestor
 		return nil
 	}
 	t.log.Attr("rid", rid).Infof("%s: restore from snapshot %s of %s in store %s into %s", rid, src.run.ShortID(), src.run.Path, src.store.Ref(), dir)
+	src.attempted = true
 	if err := src.store.Restore(ctx, src.run, rid, dir); err != nil {
 		return fmt.Errorf("restore %s: %w", rid, err)
 	}
 	return nil
+}
+
+// acknowledgeProvisionRestore writes into the store the receipt of the
+// restore a provision did, or failed with provisionErr, from a snapshot of
+// another cluster: this cluster is then a replica of the object the snapshot
+// is of, which the cluster writing its runs judges from the receipt.
+//
+// A provision restoring no head writes none, as the one of a node the shared
+// heads are not started on, one of an instance provisioned already, or one
+// failing before it wrote into a head: it changes nothing of what the
+// instance holds. A receipt that can not be written
+// is said and does not fail the provision.
+func (t *actor) acknowledgeProvisionRestore(ctx context.Context, src *provisionRestore, provisionErr error) {
+	if src == nil || !src.attempted {
+		return
+	}
+	n, err := t.Node()
+	if err != nil {
+		return
+	}
+	clusterID, clusterName := n.Cluster()
+	if src.run.ClusterID == "" || clusterID == "" || src.run.ClusterID == clusterID {
+		return
+	}
+	receipt := backup.Receipt{
+		ReplicaClusterID:   clusterID,
+		ReplicaClusterName: clusterName,
+		Node:               hostname.Hostname(),
+	}
+	if provisionErr != nil {
+		receipt.RestoreError = provisionErr.Error()
+	}
+	switch alerts, err := t.config.Validate(); {
+	case err != nil:
+		receipt.ConfigErrors = []string{err.Error()}
+	case alerts.HasError():
+		for _, alert := range alerts.Errors() {
+			receipt.ConfigErrors = append(receipt.ConfigErrors, alert.StringWithoutMeta())
+		}
+	default:
+		receipt.ConfigValid = true
+	}
+	// A provision interrupted, by its timeout or by the user, still says
+	// it failed.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ackTimeout)
+	defer cancel()
+	written, err := backup.Acknowledge(ctx, src.store, src.run, receipt)
+	switch {
+	case errors.Is(err, backup.ErrNoDocs):
+		t.log.Debugf("no receipt of snapshot %s for the cluster %s: store %s keeps no documents", src.run.ShortID(), src.run.ClusterName, src.store.Ref())
+	case err != nil:
+		t.log.Warnf("write the receipt of snapshot %s for the cluster %s into store %s: %s", src.run.ShortID(), src.run.ClusterName, src.store.Ref(), err)
+	case written:
+		t.log.Infof("write the receipt of snapshot %s into store %s, for the cluster %s to see this replica", src.run.ShortID(), src.store.Ref(), src.run.ClusterName)
+	}
 }

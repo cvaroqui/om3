@@ -181,7 +181,7 @@ func (t *actor) lockedProvision(ctx context.Context) error {
 	if src != nil {
 		defer src.store.Close()
 	}
-	return t.action(ctx, func(ctx context.Context, r resource.Driver) error {
+	err = t.action(ctx, func(ctx context.Context, r resource.Driver) error {
 		rid := r.RID()
 		t.log.Attr("rid", rid).Tracef("%s: provision resource", rid)
 		leader := actioncontext.IsLeader(ctx)
@@ -202,6 +202,10 @@ func (t *actor) lockedProvision(ctx context.Context) error {
 		}
 		return nil
 	})
+	// The cluster a snapshot of another is restored on is a replica of the
+	// object, which says so in the store.
+	t.acknowledgeProvisionRestore(ctx, src, err)
+	return err
 }
 
 // resolveProvisionKeywords sets the keywords of r read at provision only,

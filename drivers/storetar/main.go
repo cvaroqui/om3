@@ -11,6 +11,10 @@
 // name reads. Both are this driver's: another store records the same in its
 // own way, as tags.
 //
+// A docs directory beside the runs of an object holds its documents, as the
+// receipts the clusters restoring its runs write back: <cluster id>/<object
+// id>/docs/<name>.json. It is not a run, and no listing reads it as one.
+//
 // It neither deduplicates nor encrypts. It is the reference store of the
 // backup framework, exercising every capability with nothing but the
 // standard library, and a store for tests.
@@ -102,13 +106,14 @@ const (
 var (
 	drvID = driver.NewID(driver.GroupStore, "tar")
 
-	_ backup.Driver   = (*T)(nil)
-	_ backup.Streamer = (*T)(nil)
-	_ backup.Pruner   = (*T)(nil)
-	_ backup.Localer  = (*T)(nil)
-	_ backup.Sharer   = (*T)(nil)
-	_ backup.Statser  = (*T)(nil)
-	_ backup.Usager   = (*T)(nil)
+	_ backup.Driver    = (*T)(nil)
+	_ backup.Streamer  = (*T)(nil)
+	_ backup.Pruner    = (*T)(nil)
+	_ backup.Localer   = (*T)(nil)
+	_ backup.Sharer    = (*T)(nil)
+	_ backup.Statser   = (*T)(nil)
+	_ backup.Usager    = (*T)(nil)
+	_ backup.Annotator = (*T)(nil)
 )
 
 func init() {
@@ -152,6 +157,10 @@ func (t *T) objectDir(run backup.Run) (storeFS, string, error) {
 func (t *T) runDir(run backup.Run) (storeFS, string, error) {
 	if err := validName("run id", run.ID); err != nil {
 		return nil, "", err
+	}
+	if run.ID == docsDir {
+		// The directory of the documents of the object.
+		return nil, "", fmt.Errorf("invalid run id %q", run.ID)
 	}
 	fsys, dir, err := t.objectDir(run)
 	if err != nil {
@@ -394,6 +403,10 @@ func objectRuns(fsys storeFS, objectDir string) ([]backup.Run, error) {
 	}
 	runs := make([]backup.Run, 0, len(matches))
 	for _, match := range matches {
+		if filepath.Base(filepath.Dir(match)) == docsDir {
+			// The documents of the object, not a run.
+			continue
+		}
 		mf, err := readManifest(fsys, filepath.Dir(match))
 		if errors.Is(err, os.ErrNotExist) {
 			// removed meanwhile
@@ -629,6 +642,10 @@ func (t *T) Runs(ctx context.Context, filter backup.RunFilter) ([]backup.Run, er
 			continue
 		}
 		for _, match := range matches {
+			if filepath.Base(filepath.Dir(match)) == docsDir {
+				// The documents of the object, not a run.
+				continue
+			}
 			mf, err := readManifest(fsys, filepath.Dir(match))
 			if err != nil {
 				errs = errors.Join(errs, err)

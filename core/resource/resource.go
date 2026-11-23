@@ -350,6 +350,47 @@ type (
 		// Volumes is the list of the vol objects the resource uses: the
 		// one a volume resource is, as named or by default.
 		Volumes naming.Paths `json:"volumes,omitempty"`
+
+		// Replicas are the replicas of the object other clusters keep
+		// from what this resource writes, as a sync.store judges them
+		// from the receipts they write back into its store. None where
+		// no other cluster restores from the resource.
+		Replicas []ReplicaStatus `json:"replicas,omitempty"`
+	}
+
+	// ReplicaStatus is the state of the replica of the object a cluster
+	// keeps by restoring what a resource wrote, as the cluster writing
+	// judges it: on its own clock, from the runs it wrote and from what the
+	// replica said it restored.
+	ReplicaStatus struct {
+		// Cluster and ClusterID are the cluster keeping the replica.
+		Cluster   string `json:"cluster"`
+		ClusterID string `json:"cluster_id"`
+
+		// RunID is the run the replica restored last, and SeenRunID
+		// the latest run it listed then.
+		RunID     string `json:"run_id"`
+		SeenRunID string `json:"seen_run_id"`
+
+		// ConfigInSync says the configuration the replica restored is
+		// the one of the latest run it listed.
+		ConfigInSync bool `json:"config_in_sync"`
+
+		// ConfigValid says the configuration of the object validates
+		// on the replica, and ConfigErrors what refuses it there.
+		ConfigValid  bool     `json:"config_valid"`
+		ConfigErrors []string `json:"config_errors,omitempty"`
+
+		// RPOBreachedAt is when the replica breaches, or breached, the
+		// recovery point objective of the resource: the max delay
+		// after the run it restored was begun. The epoch for a replica
+		// holding a run this cluster does not know. Zero when the
+		// resource has no max delay.
+		RPOBreachedAt time.Time `json:"rpo_breached_at,omitzero"`
+
+		// RestoreError is why the last restore of the replica failed,
+		// empty when it did not.
+		RestoreError string `json:"restore_error,omitempty"`
 	}
 
 	Files []File
@@ -1650,6 +1691,7 @@ func GetStatus(ctx context.Context, r Driver) Status {
 		SyncScope:  getSyncScope(r),
 		Datastores: getDatastores(ctx, r),
 		Volumes:    getVolumes(ctx, r),
+		Replicas:   getReplicas(r),
 		Holds:      getRuntimeHolds(ctx, r, resStatus),
 
 		RPOBreachedAt: r.StatusLog().RPOBreachAt(),
@@ -1801,6 +1843,7 @@ func (t *Status) DeepCopy() *Status {
 	n.Files = deepcopy.Slice(t.Files)
 	n.Datastores = deepcopy.Slice(t.Datastores)
 	n.Volumes = deepcopy.Slice(t.Volumes)
+	n.Replicas = deepcopy.Any(t.Replicas)
 	n.Holds = deepcopy.Slice(t.Holds)
 	n.Info = deepcopy.Any(t.Info)
 	if t.StartBlocker != nil {
@@ -1840,6 +1883,9 @@ func (t *Status) Unstructured() map[string]any {
 	}
 	if len(t.Volumes) > 0 {
 		m["volumes"] = t.Volumes
+	}
+	if len(t.Replicas) > 0 {
+		m["replicas"] = t.Replicas
 	}
 	return m
 }
@@ -1955,6 +2001,16 @@ func getVolumes(ctx context.Context, t Driver) naming.Paths {
 		return nil
 	}
 	return i.VolumeList(ctx)
+}
+
+// getReplicas returns the replicas the status of the resource judged: it is
+// read after the status is evaluated.
+func getReplicas(t Driver) []ReplicaStatus {
+	i, ok := t.(replicaLister)
+	if !ok {
+		return nil
+	}
+	return i.Replicas()
 }
 
 func getSyncScope(t Driver) string {

@@ -290,6 +290,12 @@ type (
 	volumeLister interface {
 		VolumeList(context.Context) naming.Paths
 	}
+
+	// replicaLister is implemented by a resource other clusters restore
+	// the object from: the replicas its last status evaluation judged.
+	replicaLister interface {
+		Replicas() []ReplicaStatus
+	}
 	toSyncer interface {
 		ToSync(context.Context) []string
 	}

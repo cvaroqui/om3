@@ -3601,6 +3601,9 @@ type ResourceProvisionStatus struct {
 	State Provisioned `json:"state"`
 }
 
+// ResourceReplicaStatus defines model for ResourceReplicaStatus.
+type ResourceReplicaStatus = resource.ReplicaStatus
+
 // ResourceStatus defines model for ResourceStatus.
 type ResourceStatus = resource.Status
 

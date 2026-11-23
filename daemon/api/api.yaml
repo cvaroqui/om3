@@ -13471,6 +13471,15 @@ components:
             Errors in optional resource don't stop a state transition action
         provisioned:
           $ref: '#/components/schemas/ResourceProvisionStatus'
+        replicas:
+          type: array
+          description: |
+            the replicas of the object other clusters keep by restoring what
+            the resource wrote, as a sync.store judges them from the receipts
+            they write back into its store, on the clock of this cluster.
+            None where no other cluster restores from the resource
+          items:
+            $ref: '#/components/schemas/ResourceReplicaStatus'
         standby:
           type: boolean
           description: |
@@ -13486,6 +13495,57 @@ components:
             type: string
         type:
           type: string
+
+    ResourceReplicaStatus:
+      x-go-type: resource.ReplicaStatus
+      x-go-type-import:
+          path: github.com/opensvc/om3/v3/core/resource
+      type: object
+      required:
+        - cluster
+        - cluster_id
+        - run_id
+        - seen_run_id
+        - config_in_sync
+        - config_valid
+      properties:
+        cluster:
+          type: string
+          description: the name of the cluster keeping the replica
+        cluster_id:
+          type: string
+          description: the id of the cluster keeping the replica
+        run_id:
+          type: string
+          description: the run the replica restored last
+        seen_run_id:
+          type: string
+          description: the latest run of the object the replica listed when it restored
+        config_in_sync:
+          type: boolean
+          description: |
+            the configuration the replica restored is the one of the latest
+            run it listed
+        config_valid:
+          type: boolean
+          description: the configuration of the object validates on the replica
+        config_errors:
+          type: array
+          description: what refuses the configuration of the object on the replica
+          items:
+            type: string
+        rpo_breached_at:
+          type: string
+          format: date-time
+          description: |
+            when the replica breaches, or breached, the recovery point
+            objective of the resource: its max delay after the run the
+            replica restored was begun. The epoch for a replica whose restore
+            failed, or holding a run this cluster does not know. Not set when
+            the resource has no max delay
+        restore_error:
+          type: string
+          description: why the last restore of the replica failed
 
     Role:
       type: string
