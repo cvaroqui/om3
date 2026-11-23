@@ -1377,6 +1377,27 @@ func (e InQueryRestoreRefs) Valid() bool {
 	}
 }
 
+// Defines values for InQueryRestoreStage.
+const (
+	InQueryRestoreStageAlways InQueryRestoreStage = "always"
+	InQueryRestoreStageAuto   InQueryRestoreStage = "auto"
+	InQueryRestoreStageNever  InQueryRestoreStage = "never"
+)
+
+// Valid indicates whether the value is a known member of the InQueryRestoreStage enum.
+func (e InQueryRestoreStage) Valid() bool {
+	switch e {
+	case InQueryRestoreStageAlways:
+		return true
+	case InQueryRestoreStageAuto:
+		return true
+	case InQueryRestoreStageNever:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PostDaemonAuditParamsLevel.
 const (
 	PostDaemonAuditParamsLevelDebug PostDaemonAuditParamsLevel = "debug"
@@ -1419,6 +1440,27 @@ func (e PostInstanceActionRestoreParamsRefs) Valid() bool {
 	case PostInstanceActionRestoreParamsRefsOverwrite:
 		return true
 	case PostInstanceActionRestoreParamsRefsSkip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PostInstanceActionRestoreParamsStage.
+const (
+	PostInstanceActionRestoreParamsStageAlways PostInstanceActionRestoreParamsStage = "always"
+	PostInstanceActionRestoreParamsStageAuto   PostInstanceActionRestoreParamsStage = "auto"
+	PostInstanceActionRestoreParamsStageNever  PostInstanceActionRestoreParamsStage = "never"
+)
+
+// Valid indicates whether the value is a known member of the PostInstanceActionRestoreParamsStage enum.
+func (e PostInstanceActionRestoreParamsStage) Valid() bool {
+	switch e {
+	case PostInstanceActionRestoreParamsStageAlways:
+		return true
+	case PostInstanceActionRestoreParamsStageAuto:
+		return true
+	case PostInstanceActionRestoreParamsStageNever:
 		return true
 	default:
 		return false
@@ -4355,6 +4397,9 @@ type InQueryRestoreRefs string
 // InQueryRestoreSnapshot defines model for inQueryRestoreSnapshot.
 type InQueryRestoreSnapshot = string
 
+// InQueryRestoreStage defines model for inQueryRestoreStage.
+type InQueryRestoreStage string
+
 // InQueryRestoreStop defines model for inQueryRestoreStop.
 type InQueryRestoreStop = bool
 
@@ -5437,6 +5482,13 @@ type PostInstanceActionRestoreParams struct {
 	// Snapshot The snapshot to restore, by id or a prefix of it, the latest when not set.
 	Snapshot *InQueryRestoreSnapshot `form:"snapshot,omitempty" json:"snapshot,omitempty"`
 
+	// Stage Whether each head is restored into a stage, switched to once written
+	// whole, the head left as it is until then: auto stages the heads whose
+	// storage can and restores the others in place, always refuses a head
+	// that can not, never restores in place. The stage keyword of the
+	// resource when not set.
+	Stage *PostInstanceActionRestoreParamsStage `form:"stage,omitempty" json:"stage,omitempty"`
+
 	// Stop Stop the resources using the heads and start the heads, rather than
 	// refuse the restore in place, and leave the instance stopped.
 	Stop *InQueryRestoreStop `form:"stop,omitempty" json:"stop,omitempty"`
@@ -5444,6 +5496,9 @@ type PostInstanceActionRestoreParams struct {
 
 // PostInstanceActionRestoreParamsRefs defines parameters for PostInstanceActionRestore.
 type PostInstanceActionRestoreParamsRefs string
+
+// PostInstanceActionRestoreParamsStage defines parameters for PostInstanceActionRestore.
+type PostInstanceActionRestoreParamsStage string
 
 // PostInstanceActionResyncParams defines parameters for PostInstanceActionResync.
 type PostInstanceActionResyncParams struct {

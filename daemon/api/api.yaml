@@ -4701,6 +4701,7 @@ paths:
         - $ref: '#/components/parameters/inQueryRestoreInto'
         - $ref: '#/components/parameters/inQueryRestoreRefs'
         - $ref: '#/components/parameters/inQueryRestoreSnapshot'
+        - $ref: '#/components/parameters/inQueryRestoreStage'
         - $ref: '#/components/parameters/inQueryRestoreStop'
       responses:
         200:
@@ -15218,6 +15219,22 @@ components:
       description: The snapshot to restore, by id or a prefix of it, the latest when not set.
       schema:
         type: string
+
+    inQueryRestoreStage:
+      in: query
+      name: stage
+      description: |
+        Whether each head is restored into a stage, switched to once written
+        whole, the head left as it is until then: auto stages the heads whose
+        storage can and restores the others in place, always refuses a head
+        that can not, never restores in place. The stage keyword of the
+        resource when not set.
+      schema:
+        type: string
+        enum:
+          - auto
+          - always
+          - never
 
     inQueryFileName:
       in: query

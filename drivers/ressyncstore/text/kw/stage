@@ -1,0 +1,10 @@
+How a restore in place writes a head: `auto` restores into a stage of the
+heads whose storage makes one, a zfs dataset, as a clone of it, or a
+directory, as a sibling of it, and switches the head to its stage once
+every head of the run is restored, at once, so the head is at any time what
+the last restore written whole left; the other heads are restored in place,
+emptied then written, and marked incomplete meanwhile, which a start
+refuses to run on. `always` refuses a restore of a head with no stage,
+before anything is written. `never` restores every head in place.
+
+The `--stage` option of a restore takes over.

@@ -55,6 +55,7 @@ type (
 		Keep        string
 		IncludeRefs bool
 		Snapshot    string
+		Stage       string
 		ObjectID    uuid.UUID
 
 		// replicas are the replicas of the object the last status
@@ -956,6 +957,9 @@ func (t *T) Restore(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if opts.Stage != "" && (opts.Into != "" || opts.Config) {
+		return fmt.Errorf("--stage says how the heads are restored in place, which --into and --config do not")
+	}
 	if opts.Into != "" {
 		if run.Has(backup.MemberRefs) {
 			t.Log().Infof("the referenced keys are not restored aside, where they would be written in clear")
@@ -975,8 +979,12 @@ func (t *T) Restore(ctx context.Context) error {
 		// The referenced keys are restored with the heads.
 		return t.restoreConfig(ctx, s, run)
 	}
+	mode, err := t.stageMode(opts.Stage)
+	if err != nil {
+		return err
+	}
 	t.sayConfigDrift(ctx, s, run)
-	touched, err := t.restoreInPlace(ctx, s, run, members, opts.ByRID)
+	touched, err := t.restoreInPlace(ctx, s, run, members, opts.ByRID, mode)
 	if err == nil {
 		err = t.restoreRefs(ctx, s, run, refsMode)
 	}
@@ -1149,9 +1157,14 @@ func (t *T) restoreInto(ctx context.Context, s backup.Store, run backup.Run, mem
 // from the run and the heads of the other resources under it, which their
 // own members restore.
 //
-// It says whether it touched a head, emptied or written: every refusal comes
-// before the first head is, and leaves the instance holding what it held.
-func (t *T) restoreInPlace(ctx context.Context, s backup.Store, run backup.Run, members []string, byRID bool) (bool, error) {
+// A head whose storage stages one is not written: its member is restored
+// into a stage of it, which the head is switched to once every member of the
+// run is restored, as mode says. See restoreTargets.
+//
+// It says whether it touched a head, emptied, written or switched: every
+// refusal comes before the first head is, and leaves the instance holding
+// what it held, as a restore failing before its stages are committed does.
+func (t *T) restoreInPlace(ctx context.Context, s backup.Store, run backup.Run, members []string, byRID bool, mode string) (bool, error) {
 	o := t.GetObjectDriver()
 	sb := statusbus.FromContext(ctx)
 	if !actioncontext.IsForce(ctx) {
@@ -1210,16 +1223,7 @@ func (t *T) restoreInPlace(ctx context.Context, s backup.Store, run backup.Run, 
 			return false, fmt.Errorf("restore %s into %s: %s mounted under it, not a head of the object: unmount it, or restore aside with --into", h.rid, h.dir, strings.Join(foreign, " "))
 		}
 	}
-	touched := false
-	for i, h := range targets {
-		t.Log().Infof("restore %s of run %s from store %s into %s", h.rid, run.ShortID(), s.Ref(), h.dir)
-		emptied, err := restoreUnder(ctx, s, run, h, heads[i], apartUnder(h.dir, objectHeads, mounts))
-		touched = touched || emptied
-		if err != nil {
-			return touched, fmt.Errorf("restore %s: %w", h.rid, err)
-		}
-	}
-	return touched, nil
+	return t.restoreTargets(ctx, s, run, targets, heads, objectHeads, mounts, mode, t.restoreEnv())
 }
 
 // restoreUnder empties the target h, under the head under, and restores its

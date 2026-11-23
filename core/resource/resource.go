@@ -1546,6 +1546,14 @@ func evalStatus(ctx context.Context, r Driver) (status.T, error) {
 					s = status.StandbyDown
 				}
 			}
+			if r.GetObject() != nil {
+				// A restore in place emptied the head and did not
+				// finish: it holds a part of a run, which a start
+				// refuses to run on.
+				if reason, ok := HeadIncomplete(r.VarDir()); ok {
+					r.StatusLog().Warn("incomplete head: %s", reason)
+				}
+			}
 		}
 	}
 	if tags != nil {

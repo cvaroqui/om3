@@ -239,6 +239,55 @@ type (
 		SnapshotHead(ctx context.Context, name string) (dir string, release func() error, ok bool, err error)
 	}
 
+	// HeadStager is a resource whose head can be written as a generation
+	// apart from the live one, and switched to once written whole: a
+	// restore writing into the stage leaves the live head as its last
+	// complete restore left it, whatever interrupts it.
+	HeadStager interface {
+		// StageHead opens a stage named name, as the run restored
+		// into it, and returns ok false when the storage of this head
+		// stages none: its restore is then written in place.
+		StageHead(ctx context.Context, name string) (stage HeadStage, ok bool, err error)
+
+		// RecoverHeadStage finishes the commit, or discards the stage,
+		// a killed action left, as the journal of the stage says. The
+		// start of the resource and StageHead call it first. It returns
+		// ErrHeadStageBusy when the process staging is still running.
+		RecoverHeadStage(ctx context.Context) error
+	}
+
+	// HeadStage is a generation of a head being written, apart from the
+	// live one.
+	HeadStage struct {
+		// Dir is where the writer writes.
+		Dir string
+
+		// Seeded says Dir already holds the committed generation, as a
+		// copy-on-write clone of it does: a writer may write a delta,
+		// and what it leaves is kept.
+		Seeded bool
+
+		// LinkDest is the committed tree, for a writer able to hardlink
+		// the files unchanged, empty when Dir is not on its filesystem.
+		LinkDest string
+
+		// Seal journals the decision to commit, which a recovery then
+		// finishes rather than discards: a restore of several heads
+		// seals every stage before committing the first, so an action
+		// killed between two commits leaves no head of the former
+		// generation beside one of the new.
+		Seal func(context.Context) error
+
+		// Commit switches the head to the stage and drops the former
+		// generation. It is journaled and idempotent: RecoverHeadStage
+		// finishes one a kill interrupted.
+		Commit func(context.Context) error
+
+		// Discard drops the stage, the live head left as it is. It
+		// fails once the commit switched the head.
+		Discard func(context.Context) error
+	}
+
 	// ConfigRestorer is a sync resource holding the configuration of the
 	// object at the points in time it can restore.
 	ConfigRestorer interface {

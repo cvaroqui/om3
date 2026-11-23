@@ -87,6 +87,12 @@ func (t *T) Start(ctx context.Context) error {
 	if _, err := t.resolveMountPoint(); err != nil {
 		return err
 	}
+	// A restore killed while staging the head, or while switching to its
+	// stage, left one to discard, or a switch to finish, before the
+	// dataset is mounted.
+	if err := t.RecoverHeadStage(ctx); err != nil {
+		return err
+	}
 	if err := t.mount(ctx); err != nil {
 		return err
 	}
@@ -812,6 +818,11 @@ func (t *T) UnprovisionAsLeader(ctx context.Context) error {
 		// The mount point a start created is still removed.
 		t.Log().Infof("dataset %s is already destroyed", t.Device)
 		return t.removeMountPoint()
+	}
+	// The stage a killed restore left is a clone of the dataset, which
+	// its destroy refuses.
+	if err := t.RecoverHeadStage(ctx); err != nil {
+		return err
 	}
 	if err := fs.Destroy(zfs.FilesystemDestroyWithRemoveSnapshots(true)); err != nil {
 		return err

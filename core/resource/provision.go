@@ -286,7 +286,9 @@ func unprovision(ctx context.Context, t Driver, leader bool) error {
 	if err := setProvisionRecorded(false, t); err != nil {
 		return err
 	}
-	return nil
+	// The head a restore left incomplete is gone with the resource: the
+	// one its next provision makes is another.
+	return ClearHeadIncomplete(t.VarDir())
 }
 
 // unprovisionStop stops a resource before its unprovision. An unprovision of

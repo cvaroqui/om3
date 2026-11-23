@@ -374,6 +374,7 @@ var rules = map[string]Group{
 			"max_delay":    {},
 			"rids":         {},
 			"schedule":     {},
+			"stage":        {},
 		},
 		Default: &rootRule,
 	},

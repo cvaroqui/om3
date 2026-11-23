@@ -60,6 +60,15 @@ var (
 			Text:       keywords.NewText(fs, "text/kw/snapshot"),
 		},
 		{
+			Attr:       "Stage",
+			Candidates: []string{stageAuto, stageAlways, stageNever},
+			Default:    stageAuto,
+			Option:     "stage",
+			Group:      ressync.GroupTransfer.ID,
+			Scopable:   true,
+			Text:       keywords.NewText(fs, "text/kw/stage"),
+		},
+		{
 			Attr:    "Keep",
 			Example: "24h 7d 4w 6m",
 			Option:  "keep",

@@ -52,6 +52,11 @@ func (t *T) Configure() error {
 }
 
 func (t *T) Start(ctx context.Context) error {
+	// A restore killed while staging the directory, or while switching to
+	// its stage, left one to discard, or a switch to finish.
+	if err := t.RecoverHeadStage(ctx); err != nil {
+		return err
+	}
 	if err := t.create(ctx); err != nil {
 		return err
 	}

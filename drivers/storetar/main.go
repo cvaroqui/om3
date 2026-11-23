@@ -739,18 +739,21 @@ func (t *T) Restore(ctx context.Context, run backup.Run, member string, dst stri
 		return err
 	}
 	defer dstRoot.Close()
+	// What is read of the member is what its LogicalBytes count: the
+	// progress of the restore is told in them.
+	r := backup.ProgressReader(ctx, rc)
 	if m.Kind == backup.MemberStream {
 		f, err := dstRoot.OpenFile(member, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(f, readerWithContext(ctx, rc)); err != nil {
+		if _, err := io.Copy(f, readerWithContext(ctx, r)); err != nil {
 			_ = f.Close()
 			return err
 		}
 		return f.Close()
 	}
-	return extractTar(ctx, rc, dstRoot)
+	return extractTar(ctx, r, dstRoot)
 }
 
 // Cat returns a reader of the member of the run: the document of a streamed

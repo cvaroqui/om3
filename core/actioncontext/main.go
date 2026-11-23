@@ -340,6 +340,11 @@ type RestoreOptions struct {
 	// Heads are the heads to restore, every head of the run when empty.
 	Heads []string
 
+	// Stage says whether the heads are restored into a stage, switched
+	// to once written whole: auto, always or never, as the resource is
+	// configured when empty.
+	Stage string
+
 	// Refs is how the keys of the sec and cfg the object references are
 	// restored: missing, skip or overwrite, missing when empty.
 	Refs string

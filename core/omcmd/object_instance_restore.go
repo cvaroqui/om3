@@ -81,6 +81,10 @@ func (t *CmdObjectInstanceRestore) Run(kind string) error {
 			if len(t.Heads) > 0 {
 				params.Head = &t.Heads
 			}
+			if t.Stage != "" {
+				stage := api.PostInstanceActionRestoreParamsStage(t.Stage)
+				params.Stage = &stage
+			}
 			if t.Refs != "" {
 				refs := api.PostInstanceActionRestoreParamsRefs(t.Refs)
 				params.Refs = &refs
@@ -132,6 +136,7 @@ func (t *CmdObjectInstanceRestore) Run(kind string) error {
 				Stop:     t.Stop,
 				Heads:    t.Heads,
 				Refs:     t.Refs,
+				Stage:    t.Stage,
 			})
 			return nil, o.SyncRestore(ctx)
 		}),

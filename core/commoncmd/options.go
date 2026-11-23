@@ -74,6 +74,11 @@ type (
 		// needs, and left stopped.
 		Stop bool
 
+		// Stage says whether the heads are restored into a stage,
+		// switched to once written whole: auto, always or never, as
+		// the stage keyword of the resource when empty.
+		Stage string
+
 		// Heads are the heads to restore, every head of the snapshot
 		// when empty.
 		Heads []string

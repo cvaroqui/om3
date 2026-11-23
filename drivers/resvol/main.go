@@ -766,6 +766,44 @@ func (t *T) SnapshotHead(ctx context.Context, name string) (string, func() error
 	return snapshotter.SnapshotHead(ctx, name)
 }
 
+// StageHead implements resource.HeadStager: the stage of the head of the
+// vol, which the resource of the vol holding it opens, when its storage
+// stages one.
+func (t *T) StageHead(ctx context.Context, name string) (resource.HeadStage, bool, error) {
+	stager, err := t.headStager(ctx)
+	if err != nil || stager == nil {
+		return resource.HeadStage{}, false, err
+	}
+	return stager.StageHead(ctx, name)
+}
+
+// RecoverHeadStage implements resource.HeadStager. The start of the volume
+// starts its vol, whose resource holding the head recovers its stage itself,
+// once what it is made on is up: this recovery is the one a stage asks for,
+// of a vol that is up.
+func (t *T) RecoverHeadStage(ctx context.Context) error {
+	stager, err := t.headStager(ctx)
+	if err != nil || stager == nil {
+		return err
+	}
+	return stager.RecoverHeadStage(ctx)
+}
+
+// headStager returns the resource of the vol holding its head, nil when it
+// stages none.
+func (t *T) headStager(ctx context.Context) (resource.HeadStager, error) {
+	volume, err := t.Volume()
+	if err != nil {
+		return nil, err
+	}
+	rid, err := volume.HeadRID(ctx)
+	if err != nil || rid == "" {
+		return nil, err
+	}
+	stager, _ := volume.ResourceByID(rid).(resource.HeadStager)
+	return stager, nil
+}
+
 func (t *T) exposedDevice(ctx context.Context) *device.T {
 	volume, err := t.Volume()
 	if err != nil {

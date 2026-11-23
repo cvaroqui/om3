@@ -93,10 +93,27 @@ func (t *actor) restoreProvisionedHead(ctx context.Context, src *provisionRestor
 	}
 	t.log.Attr("rid", rid).Infof("%s: restore from snapshot %s of %s in store %s into %s", rid, src.run.ShortID(), src.run.Path, src.store.Ref(), dir)
 	src.attempted = true
-	if err := src.store.Restore(ctx, src.run, rid, dir); err != nil {
+	return restoreMarked(ctx, src.store, src.run, rid, dir, r.VarDir())
+}
+
+// restoreMarked restores into dir, the head of the resource rid, its member
+// of run, the head marked incomplete in varDir, the var directory of the
+// resource, from before it is written until it is restored: a provision
+// failing or killed meanwhile leaves a head a start refuses to run on, until
+// a restore of it, or a forced start. The unprovision of the resource clears
+// the mark with the head.
+//
+// The head is not staged: just provisioned, it holds nothing a stage would
+// keep, and a provision failing is one to do again.
+func restoreMarked(ctx context.Context, store backup.Store, run backup.Run, rid, dir, varDir string) error {
+	reason := fmt.Sprintf("the provision restoring snapshot %s into it did not finish: restore it, or provision it again", run.ShortID())
+	if err := resource.MarkHeadIncomplete(varDir, reason); err != nil {
+		return fmt.Errorf("mark %s incomplete: %w", rid, err)
+	}
+	if err := store.Restore(ctx, run, rid, dir); err != nil {
 		return fmt.Errorf("restore %s: %w", rid, err)
 	}
-	return nil
+	return resource.ClearHeadIncomplete(varDir)
 }
 
 // acknowledgeProvisionRestore writes into the store the receipt of the
