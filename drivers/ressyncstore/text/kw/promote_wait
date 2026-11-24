@@ -1,0 +1,11 @@
+How long the promotion of a replica waits for a follow restoring its heads
+when asked, rather than end it: the time the newer snapshot is worth.
+
+The promotion weighs the restore in flight on what it wrote so far: when
+what is left would take no longer than this at the throughput seen since it
+began, the promotion waits for it, this long at most, and the replica starts
+on the snapshot it was restoring. Otherwise, as with the default `0`, the
+restore is ended at once, its stages discarded, and the replica starts on
+the snapshot it held before.
+
+The `--abort-restore` and `--wait-restore` options of a promotion take over.

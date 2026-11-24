@@ -253,6 +253,14 @@ var (
 		MustLock: true,
 		PG:       true,
 	}
+	// Promote is the promotion of a replica, as far as its node goes: the
+	// restore of a follow in flight waited for or ended, and its cluster
+	// recorded as the primary. It takes the lock the follow holds, which
+	// tells it ended.
+	Promote = Properties{
+		Name:     "promote",
+		MustLock: true,
+	}
 	// SyncFollow is the follow of a replica: the latest run of the
 	// object it is a replica of restored into its heads. It takes the
 	// lock a start and a restore take, which run on the same heads.

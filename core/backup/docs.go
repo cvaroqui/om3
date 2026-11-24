@@ -299,3 +299,120 @@ func ConfigDigest(b []byte) (string, error) {
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
+
+// Primary is the cluster entitled to write the runs of an object the
+// clusters of two sites take turns running, as the store says it: the
+// promotion of a replica writes it, and a cluster it does not name writes no
+// run of the object from then on, so the cluster a disaster took away does
+// not write over its successor when it comes back.
+//
+// The object is not one object: each cluster holds its own, with an id of
+// its own, and writes its runs under its cluster id and that id. So the
+// document is kept under each of these identities the promotion knows, the
+// one of the source it takes over from, and its own: a cluster reads the one
+// kept under its own identity, whichever it is, and finds there who writes,
+// and under which identity the runs to follow are. An identity holding no
+// document is the primary of its runs, as before any promotion.
+type Primary struct {
+	// ClusterID and ClusterName are the cluster promoted, and ObjectID
+	// the id of the object there: its runs are kept under both.
+	ClusterID   string `json:"cluster_id"`
+	ClusterName string `json:"cluster_name"`
+	ObjectID    string `json:"object_id"`
+
+	// Epoch counts the promotions of the object, each one more than the
+	// highest the promotion read.
+	Epoch uint64 `json:"epoch"`
+
+	// PromotedFromRun is the run of the source the heads of the replica
+	// held when it was promoted, empty when they held none whole.
+	PromotedFromRun string `json:"promoted_from_run"`
+
+	// PromotedAt is when, on the clock of the cluster promoted: it is
+	// shown, never compared with a time of another cluster.
+	PromotedAt time.Time `json:"promoted_at"`
+}
+
+// primaryName is the name of the document holding the primary of an object.
+const primaryName = "primary"
+
+// Names says the primary is the cluster clusterID.
+func (t Primary) Names(clusterID string) bool {
+	return clusterID != "" && t.ClusterID == clusterID
+}
+
+// ReadPrimary returns the primary recorded under the object objectID of the
+// cluster clusterID, and false when none is: the cluster writing the runs is
+// then their primary. A document that can not be read is an error, never a
+// primary nor the absence of one: a cluster not knowing who writes does not.
+func ReadPrimary(ctx context.Context, a Annotator, clusterID, objectID string) (Primary, bool, error) {
+	var p Primary
+	b, err := a.GetDoc(ctx, clusterID, objectID, primaryName)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return p, false, nil
+	case err != nil:
+		return p, false, err
+	}
+	if err := json.Unmarshal(b, &p); err != nil {
+		return p, false, fmt.Errorf("the %s document of the object %s of the cluster %s: %w", primaryName, objectID, clusterID, err)
+	}
+	if p.ClusterID == "" {
+		return p, false, fmt.Errorf("the %s document of the object %s of the cluster %s names no cluster", primaryName, objectID, clusterID)
+	}
+	return p, true, nil
+}
+
+// WritePrimary records p as the primary under the object objectID of the
+// cluster clusterID, replacing the one recorded.
+func WritePrimary(ctx context.Context, a Annotator, clusterID, objectID string, p Primary) error {
+	if p.ClusterID == "" || p.ObjectID == "" {
+		return fmt.Errorf("a primary names its cluster and its object")
+	}
+	b, err := json.MarshalIndent(p, "", "  ")
+	if err != nil {
+		return err
+	}
+	return a.PutDoc(ctx, clusterID, objectID, primaryName, b)
+}
+
+// Promote records the cluster and the object of self as the primary taking
+// over from the object objectID of the cluster clusterID, the source its
+// replica followed, and returns the primary recorded.
+//
+// The document of the source is written first: it is the one fencing the
+// cluster taken over from, and the one of the cluster promoted, which lets
+// it write runs, is of no use before. A promotion interrupted between the
+// two, or after them, is finished by asking it again: the source naming the
+// cluster promoted already, its epoch is kept, and what is missing written.
+func Promote(ctx context.Context, a Annotator, clusterID, objectID string, self Primary) (Primary, error) {
+	if self.ClusterID == "" || self.ObjectID == "" {
+		return self, fmt.Errorf("a primary names its cluster and its object")
+	}
+	if self.ClusterID == clusterID {
+		return self, fmt.Errorf("a cluster is not promoted over itself")
+	}
+	source, sourceFound, err := ReadPrimary(ctx, a, clusterID, objectID)
+	if err != nil {
+		return self, err
+	}
+	own, ownFound, err := ReadPrimary(ctx, a, self.ClusterID, self.ObjectID)
+	if err != nil {
+		return self, err
+	}
+	if sourceFound && source.ClusterID == self.ClusterID && source.ObjectID == self.ObjectID {
+		// Promoted already: the fence is up, the rest may not be.
+		if !ownFound || own != source {
+			if err := WritePrimary(ctx, a, self.ClusterID, self.ObjectID, source); err != nil {
+				return source, err
+			}
+		}
+		return source, nil
+	}
+	self.Epoch = max(source.Epoch, own.Epoch) + 1
+	self.PromotedAt = time.Now().UTC()
+	if err := WritePrimary(ctx, a, clusterID, objectID, self); err != nil {
+		return self, err
+	}
+	return self, WritePrimary(ctx, a, self.ClusterID, self.ObjectID, self)
+}

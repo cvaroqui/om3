@@ -11,3 +11,8 @@ For example `cn=fr cn=kr` would be evaluated as `n1 n2 n3` if `n1` and
 The glob syntax can be used in the node selector expression. For
 example `n1 n[23] n4*` would be expanded to `n1 n2 n3 n4` in a
 `n1 n2 n3 n4 n5` cluster.
+
+A node that is one of the `drpnodes` and none of the `nodes` hosts an
+instance all the same, of the object recovered there: it reads the
+`drpnodes` as the nodes hosting the instances, and the values scoped
+`@drpnodes`.

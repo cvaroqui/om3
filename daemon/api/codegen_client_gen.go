@@ -487,6 +487,9 @@ type ClientInterface interface {
 	// PostInstanceActionPGUpdate request
 	PostInstanceActionPGUpdate(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionPGUpdateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostInstanceActionPromote request
+	PostInstanceActionPromote(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionPromoteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostInstanceActionProvision request
 	PostInstanceActionProvision(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionProvisionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -708,11 +711,17 @@ type ClientInterface interface {
 	// PostObjectActionGiveback request
 	PostObjectActionGiveback(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PostObjectActionPromote request
+	PostObjectActionPromote(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPromoteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostObjectActionProvision request
 	PostObjectActionProvision(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionProvisionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostObjectActionPurge request
 	PostObjectActionPurge(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPurgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PostObjectActionReplica request
+	PostObjectActionReplica(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionReplicaParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostObjectActionResizeWithBody request with any body
 	PostObjectActionResizeWithBody(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionResizeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2529,6 +2538,18 @@ func (c *Client) PostInstanceActionPGUpdate(ctx context.Context, nodename InPath
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostInstanceActionPromote(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionPromoteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostInstanceActionPromoteRequest(c.Server, nodename, namespace, kind, name, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostInstanceActionProvision(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionProvisionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostInstanceActionProvisionRequest(c.Server, nodename, namespace, kind, name, params)
 	if err != nil {
@@ -3417,6 +3438,18 @@ func (c *Client) PostObjectActionGiveback(ctx context.Context, namespace InPathN
 	return c.Client.Do(req)
 }
 
+func (c *Client) PostObjectActionPromote(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPromoteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObjectActionPromoteRequest(c.Server, namespace, kind, name, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) PostObjectActionProvision(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionProvisionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostObjectActionProvisionRequest(c.Server, namespace, kind, name, params)
 	if err != nil {
@@ -3431,6 +3464,18 @@ func (c *Client) PostObjectActionProvision(ctx context.Context, namespace InPath
 
 func (c *Client) PostObjectActionPurge(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPurgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostObjectActionPurgeRequest(c.Server, namespace, kind, name, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PostObjectActionReplica(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionReplicaParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostObjectActionReplicaRequest(c.Server, namespace, kind, name, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11818,6 +11863,124 @@ func NewPostInstanceActionPGUpdateRequest(server string, nodename InPathNodeName
 	return req, nil
 }
 
+// NewPostInstanceActionPromoteRequest generates requests for PostInstanceActionPromote
+func NewPostInstanceActionPromoteRequest(server string, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionPromoteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "nodename", nodename, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "namespace", namespace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam3 string
+
+	pathParam3, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/node/name/%s/instance/path/%s/%s/%s/action/promote", pathParam0, pathParam1, pathParam2, pathParam3)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.AbortRestore != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "abort_restore", *params.AbortRestore, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.WaitRestore != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "wait_restore", *params.WaitRestore, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DryRun != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "dry_run", *params.DryRun, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Force != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "force", *params.Force, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostInstanceActionProvisionRequest generates requests for PostInstanceActionProvision
 func NewPostInstanceActionProvisionRequest(server string, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionProvisionParams) (*http.Request, error) {
 	var err error
@@ -18677,6 +18840,117 @@ func NewPostObjectActionGivebackRequest(server string, namespace InPathNamespace
 	return req, nil
 }
 
+// NewPostObjectActionPromoteRequest generates requests for PostObjectActionPromote
+func NewPostObjectActionPromoteRequest(server string, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPromoteParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "namespace", namespace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/object/path/%s/%s/%s/action/promote", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.AbortRestore != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "abort_restore", *params.AbortRestore, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.WaitRestore != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "wait_restore", *params.WaitRestore, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.DryRun != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "dry_run", *params.DryRun, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Force != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "force", *params.Force, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPostObjectActionProvisionRequest generates requests for PostObjectActionProvision
 func NewPostObjectActionProvisionRequest(server string, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionProvisionParams) (*http.Request, error) {
 	var err error
@@ -18804,6 +19078,105 @@ func NewPostObjectActionPurgeRequest(server string, namespace InPathNamespace, k
 		if params.Force != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "force", *params.Force, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPostObjectActionReplicaRequest generates requests for PostObjectActionReplica
+func NewPostObjectActionReplicaRequest(server string, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionReplicaParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "namespace", namespace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "kind", kind, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "name", name, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/object/path/%s/%s/%s/action/replica", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Store != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "store", *params.Store, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.SourceClusterId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source_cluster_id", *params.SourceClusterId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.SourceObjectId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "source_object_id", *params.SourceObjectId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -22691,6 +23064,9 @@ type ClientWithResponsesInterface interface {
 	// PostInstanceActionPGUpdateWithResponse request
 	PostInstanceActionPGUpdateWithResponse(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionPGUpdateParams, reqEditors ...RequestEditorFn) (*PostInstanceActionPGUpdateResponse, error)
 
+	// PostInstanceActionPromoteWithResponse request
+	PostInstanceActionPromoteWithResponse(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionPromoteParams, reqEditors ...RequestEditorFn) (*PostInstanceActionPromoteResponse, error)
+
 	// PostInstanceActionProvisionWithResponse request
 	PostInstanceActionProvisionWithResponse(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionProvisionParams, reqEditors ...RequestEditorFn) (*PostInstanceActionProvisionResponse, error)
 
@@ -22912,11 +23288,17 @@ type ClientWithResponsesInterface interface {
 	// PostObjectActionGivebackWithResponse request
 	PostObjectActionGivebackWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, reqEditors ...RequestEditorFn) (*PostObjectActionGivebackResponse, error)
 
+	// PostObjectActionPromoteWithResponse request
+	PostObjectActionPromoteWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPromoteParams, reqEditors ...RequestEditorFn) (*PostObjectActionPromoteResponse, error)
+
 	// PostObjectActionProvisionWithResponse request
 	PostObjectActionProvisionWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionProvisionParams, reqEditors ...RequestEditorFn) (*PostObjectActionProvisionResponse, error)
 
 	// PostObjectActionPurgeWithResponse request
 	PostObjectActionPurgeWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPurgeParams, reqEditors ...RequestEditorFn) (*PostObjectActionPurgeResponse, error)
+
+	// PostObjectActionReplicaWithResponse request
+	PostObjectActionReplicaWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionReplicaParams, reqEditors ...RequestEditorFn) (*PostObjectActionReplicaResponse, error)
 
 	// PostObjectActionResizeWithBodyWithResponse request with any body
 	PostObjectActionResizeWithBodyWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionResizeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostObjectActionResizeResponse, error)
@@ -27249,6 +27631,42 @@ func (r PostInstanceActionPGUpdateResponse) ContentType() string {
 	return ""
 }
 
+type PostInstanceActionPromoteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Promotion
+	JSON400      *N400
+	JSON401      *N401
+	JSON403      *N403
+	JSON408      *N408
+	JSON409      *N409
+	JSON500      *N500
+}
+
+// Status returns HTTPResponse.Status
+func (r PostInstanceActionPromoteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostInstanceActionPromoteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostInstanceActionPromoteResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PostInstanceActionProvisionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -29768,6 +30186,43 @@ func (r PostObjectActionGivebackResponse) ContentType() string {
 	return ""
 }
 
+type PostObjectActionPromoteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *Promotion
+	JSON400      *N400
+	JSON401      *N401
+	JSON403      *N403
+	JSON404      *N404
+	JSON408      *N408
+	JSON409      *N409
+	JSON500      *N500
+}
+
+// Status returns HTTPResponse.Status
+func (r PostObjectActionPromoteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostObjectActionPromoteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostObjectActionPromoteResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PostObjectActionProvisionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -29836,6 +30291,41 @@ func (r PostObjectActionPurgeResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostObjectActionPurgeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PostObjectActionReplicaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *N400
+	JSON401      *N401
+	JSON403      *N403
+	JSON404      *N404
+	JSON409      *N409
+	JSON500      *N500
+}
+
+// Status returns HTTPResponse.Status
+func (r PostObjectActionReplicaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PostObjectActionReplicaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PostObjectActionReplicaResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -32744,6 +33234,15 @@ func (c *ClientWithResponses) PostInstanceActionPGUpdateWithResponse(ctx context
 	return ParsePostInstanceActionPGUpdateResponse(rsp)
 }
 
+// PostInstanceActionPromoteWithResponse request returning *PostInstanceActionPromoteResponse
+func (c *ClientWithResponses) PostInstanceActionPromoteWithResponse(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionPromoteParams, reqEditors ...RequestEditorFn) (*PostInstanceActionPromoteResponse, error) {
+	rsp, err := c.PostInstanceActionPromote(ctx, nodename, namespace, kind, name, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostInstanceActionPromoteResponse(rsp)
+}
+
 // PostInstanceActionProvisionWithResponse request returning *PostInstanceActionProvisionResponse
 func (c *ClientWithResponses) PostInstanceActionProvisionWithResponse(ctx context.Context, nodename InPathNodeName, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostInstanceActionProvisionParams, reqEditors ...RequestEditorFn) (*PostInstanceActionProvisionResponse, error) {
 	rsp, err := c.PostInstanceActionProvision(ctx, nodename, namespace, kind, name, params, reqEditors...)
@@ -33409,6 +33908,15 @@ func (c *ClientWithResponses) PostObjectActionGivebackWithResponse(ctx context.C
 	return ParsePostObjectActionGivebackResponse(rsp)
 }
 
+// PostObjectActionPromoteWithResponse request returning *PostObjectActionPromoteResponse
+func (c *ClientWithResponses) PostObjectActionPromoteWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionPromoteParams, reqEditors ...RequestEditorFn) (*PostObjectActionPromoteResponse, error) {
+	rsp, err := c.PostObjectActionPromote(ctx, namespace, kind, name, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObjectActionPromoteResponse(rsp)
+}
+
 // PostObjectActionProvisionWithResponse request returning *PostObjectActionProvisionResponse
 func (c *ClientWithResponses) PostObjectActionProvisionWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionProvisionParams, reqEditors ...RequestEditorFn) (*PostObjectActionProvisionResponse, error) {
 	rsp, err := c.PostObjectActionProvision(ctx, namespace, kind, name, params, reqEditors...)
@@ -33425,6 +33933,15 @@ func (c *ClientWithResponses) PostObjectActionPurgeWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParsePostObjectActionPurgeResponse(rsp)
+}
+
+// PostObjectActionReplicaWithResponse request returning *PostObjectActionReplicaResponse
+func (c *ClientWithResponses) PostObjectActionReplicaWithResponse(ctx context.Context, namespace InPathNamespace, kind InPathKind, name InPathName, params *PostObjectActionReplicaParams, reqEditors ...RequestEditorFn) (*PostObjectActionReplicaResponse, error) {
+	rsp, err := c.PostObjectActionReplica(ctx, namespace, kind, name, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePostObjectActionReplicaResponse(rsp)
 }
 
 // PostObjectActionResizeWithBodyWithResponse request with arbitrary body returning *PostObjectActionResizeResponse
@@ -40671,6 +41188,74 @@ func ParsePostInstanceActionPGUpdateResponse(rsp *http.Response) (*PostInstanceA
 	return response, nil
 }
 
+// ParsePostInstanceActionPromoteResponse parses an HTTP response from a PostInstanceActionPromoteWithResponse call
+func ParsePostInstanceActionPromoteResponse(rsp *http.Response) (*PostInstanceActionPromoteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostInstanceActionPromoteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Promotion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest N400
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest N401
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest N403
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest N408
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest N409
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest N500
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePostInstanceActionProvisionResponse parses an HTTP response from a PostInstanceActionProvisionWithResponse call
 func ParsePostInstanceActionProvisionResponse(rsp *http.Response) (*PostInstanceActionProvisionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -44872,6 +45457,81 @@ func ParsePostObjectActionGivebackResponse(rsp *http.Response) (*PostObjectActio
 	return response, nil
 }
 
+// ParsePostObjectActionPromoteResponse parses an HTTP response from a PostObjectActionPromoteWithResponse call
+func ParsePostObjectActionPromoteResponse(rsp *http.Response) (*PostObjectActionPromoteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostObjectActionPromoteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Promotion
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest N400
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest N401
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest N403
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest N404
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 408:
+		var dest N408
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON408 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest N409
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest N500
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePostObjectActionProvisionResponse parses an HTTP response from a PostObjectActionProvisionWithResponse call
 func ParsePostObjectActionProvisionResponse(rsp *http.Response) (*PostObjectActionProvisionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -45005,6 +45665,67 @@ func ParsePostObjectActionPurgeResponse(rsp *http.Response) (*PostObjectActionPu
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest N409OrchestrationRefused
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest N500
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePostObjectActionReplicaResponse parses an HTTP response from a PostObjectActionReplicaWithResponse call
+func ParsePostObjectActionReplicaResponse(rsp *http.Response) (*PostObjectActionReplicaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PostObjectActionReplicaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest N400
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest N401
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest N403
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest N404
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest N409
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

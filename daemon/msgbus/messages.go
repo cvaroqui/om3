@@ -265,6 +265,8 @@ var (
 
 		"ObjectOrchestrationRefused": func() any { return &ObjectOrchestrationRefused{} },
 
+		"ObjectReplicaPromoted": func() any { return &ObjectReplicaPromoted{} },
+
 		"ObjectStatusDeleted": func() any { return &ObjectStatusDeleted{} },
 
 		"ObjectStatusDone": func() any { return &ObjectStatusDone{} },
@@ -1144,6 +1146,21 @@ type (
 		GlobalExpect *instance.MonitorGlobalExpect `json:"global_expect" yaml:"global_expect"`
 	}
 
+	// ObjectReplicaPromoted is the message published by the node promoting
+	// a replica, once its cluster is recorded in the store as the primary
+	// of the object and the keywords making it a replica are taken away,
+	// before its start is orchestrated: from then on the object is one of
+	// this cluster, which writes its snapshots. Epoch is the count of
+	// promotions the store records, and FromRunID the snapshot of the
+	// source the object starts on, empty when its heads held none whole.
+	ObjectReplicaPromoted struct {
+		pubsub.Msg `yaml:",inline"`
+		Path       naming.Path `json:"path" yaml:"path"`
+		Node       string      `json:"node" yaml:"node"`
+		Epoch      uint64      `json:"epoch" yaml:"epoch"`
+		FromRunID  string      `json:"from_run_id" yaml:"from_run_id"`
+	}
+
 	ObjectStatusDeleted struct {
 		pubsub.Msg `yaml:",inline"`
 		Path       naming.Path `json:"path" yaml:"path"`
@@ -1906,6 +1923,10 @@ func (e *ObjectOrchestrationEnd) Kind() string {
 
 func (e *ObjectOrchestrationRefused) Kind() string {
 	return "ObjectOrchestrationRefused"
+}
+
+func (e *ObjectReplicaPromoted) Kind() string {
+	return "ObjectReplicaPromoted"
 }
 
 func (e *ObjectStatusDeleted) Kind() string {

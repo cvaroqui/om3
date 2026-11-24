@@ -10,11 +10,17 @@ that store follows the source instead of writing snapshots: on its
 configuration it saved, and restores its heads, the instance staying
 stopped.
 
-The instances of a replica are the `drpnodes` of the configuration, which
-is the one of the source, word for word: a keyword whose value differs on
-the replica is scoped `@drpnodes`. The daemon does not start a replica on
-its own, and a start of it is refused unless forced.
+The configuration of a replica is the one of its source, word for word.
+Its instances are on the nodes of this cluster the configuration names:
+its `drpnodes`, where a keyword whose value differs is scoped `@drpnodes`,
+or its `nodes`, for an object a replica was promoted over. The daemon
+does not start a replica on its own, and a start of it is refused unless
+forced.
 
-`deploy --store <store> --snapshot <id> --replica` sets it. The daemon
+`deploy --store <store> --snapshot <id> --replica` sets it, and so does
+`replica --of <store>` on an object a replica was promoted over. The daemon
 writes it, and nobody but root changes or unsets it: unset, the object is
-no longer a replica, and the daemon starts it as any object.
+no longer a replica, and the daemon starts it as any object. The promotion
+of the replica, `promote`, asked by an administrator of the namespace, is
+what takes it away, once the store records this cluster as the primary of
+the object.

@@ -92,6 +92,7 @@ Receive only events matching the filtering expression formatted as:
 
      ObjectCreated, ObjectDeleted
      ObjectOrchestrationAccepted, ObjectOrchestrationEnd, ObjectOrchestrationRefused
+     ObjectReplicaPromoted
      ObjectStatusDeleted, ObjectStatusDone, ObjectStatusUpdated
 
 ### Netlink

@@ -921,6 +921,30 @@ func (e PoolVolumeListKind) Valid() bool {
 	}
 }
 
+// Defines values for PromotionAction.
+const (
+	PromotionActionAbort   PromotionAction = "abort"
+	PromotionActionProceed PromotionAction = "proceed"
+	PromotionActionRefuse  PromotionAction = "refuse"
+	PromotionActionWait    PromotionAction = "wait"
+)
+
+// Valid indicates whether the value is a known member of the PromotionAction enum.
+func (e PromotionAction) Valid() bool {
+	switch e {
+	case PromotionActionAbort:
+		return true
+	case PromotionActionProceed:
+		return true
+	case PromotionActionRefuse:
+		return true
+	case PromotionActionWait:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PropertyListKind.
 const (
 	PropertyListKindPropertyList PropertyListKind = "PropertyList"
@@ -3466,6 +3490,103 @@ type Problem struct {
 	Title string `json:"title"`
 }
 
+// Promotion What the promotion of a replica found, decided and did.
+type Promotion struct {
+	// Aborted true when the promotion ended the restore
+	Aborted *bool `json:"aborted,omitempty"`
+
+	// Action what the promotion does of the restore in flight: proceed when
+	// there is none, wait for it, abort it, or refuse to choose
+	Action PromotionAction `json:"action"`
+	DryRun bool            `json:"dry_run"`
+
+	// Epoch the count of promotions the store records for the object
+	Epoch *uint64 `json:"epoch,omitempty"`
+
+	// Followers what the other nodes of a replica keeping a copy per node did of
+	// their own restore in flight, each settled before the primary is
+	// recorded
+	Followers *[]Promotion `json:"followers,omitempty"`
+
+	// FromRunID the snapshot of the source the object starts on
+	FromRunID *string `json:"from_run_id,omitempty"`
+
+	// HeldRunCreatedAt when the source began that snapshot, on the clock of the source
+	HeldRunCreatedAt *time.Time `json:"held_run_created_at,omitempty"`
+
+	// HeldRunID the snapshot of the source the heads held whole when the promotion
+	// was asked, empty when they held none
+	HeldRunID *string `json:"held_run_id,omitempty"`
+
+	// HeldRunSeenAt when the node first listed that snapshot, on its own clock
+	HeldRunSeenAt *time.Time `json:"held_run_seen_at,omitempty"`
+
+	// Node the node that settled the restore and recorded the primary
+	Node string `json:"node"`
+
+	// OrchestrationID the orchestration starting the object
+	OrchestrationID *openapi_types.UUID `json:"orchestration_id,omitempty"`
+
+	// OrchestrationNode the node that accepted the orchestration
+	OrchestrationNode *string `json:"orchestration_node,omitempty"`
+
+	// OrchestrationRefused why no orchestration starts the object, promoted nonetheless, as
+	// an object frozen: start it once fixed
+	OrchestrationRefused *string `json:"orchestration_refused,omitempty"`
+
+	// Override the options having the promotion do otherwise
+	Override *string `json:"override,omitempty"`
+	Path     string  `json:"path"`
+
+	// PromoteWait the promote_wait of the resource following
+	PromoteWait *string `json:"promote_wait,omitempty"`
+	Reason      string  `json:"reason"`
+
+	// Restore A restore writing the heads of a replica as its promotion is asked,
+	// every time and duration on the clock of the node restoring.
+	Restore *PromotionRestore `json:"restore,omitempty"`
+
+	// SkippedNodes the nodes of the replica the promotion could not reach to settle
+	// their restore, and went on without
+	SkippedNodes    *[]string `json:"skipped_nodes,omitempty"`
+	SourceClusterID *string   `json:"source_cluster_id,omitempty"`
+	SourceObjectID  *string   `json:"source_object_id,omitempty"`
+
+	// Store the store the replica followed its source in
+	Store *string `json:"store,omitempty"`
+
+	// WaitFor the longest a wait lasts, none for the end of the restore
+	WaitFor *string `json:"wait_for,omitempty"`
+
+	// Waited how long the promotion waited for the restore
+	Waited *string `json:"waited,omitempty"`
+}
+
+// PromotionAction what the promotion does of the restore in flight: proceed when
+// there is none, wait for it, abort it, or refuse to choose
+type PromotionAction string
+
+// PromotionRestore A restore writing the heads of a replica as its promotion is asked,
+// every time and duration on the clock of the node restoring.
+type PromotionRestore struct {
+	BytesDone int64 `json:"bytes_done"`
+
+	// BytesPerSecond the throughput since the restore began, none before its first byte
+	BytesPerSecond *float64 `json:"bytes_per_second,omitempty"`
+	BytesTotal     int64    `json:"bytes_total"`
+
+	// InPlace true when the restore writes a head in place, which ending it
+	// would leave incomplete
+	InPlace bool    `json:"in_place"`
+	Percent float64 `json:"percent"`
+	Pid     int     `json:"pid"`
+
+	// Remaining what is left at that throughput, none while nothing says
+	Remaining *string   `json:"remaining,omitempty"`
+	RunID     string    `json:"run_id"`
+	StartedAt time.Time `json:"started_at"`
+}
+
 // Property defines model for Property.
 type Property struct {
 	Error  string `json:"error"`
@@ -4223,6 +4344,9 @@ type InPathNodeName = string
 // InPathOrchestrationID An orchestration id.
 type InPathOrchestrationID = string
 
+// InQueryAbortRestore defines model for inQueryAbortRestore.
+type InQueryAbortRestore = bool
+
 // InQueryAdopt defines model for inQueryAdopt.
 type InQueryAdopt = bool
 
@@ -4373,6 +4497,9 @@ type InQueryPoolName = string
 // InQueryPreflight defines model for inQueryPreflight.
 type InQueryPreflight = bool
 
+// InQueryPromoteDryRun defines model for inQueryPromoteDryRun.
+type InQueryPromoteDryRun = bool
+
 // RID defines model for inQueryRIDOptional.
 type RID = string
 
@@ -4436,6 +4563,12 @@ type InQuerySignal = string
 // InQuerySlaves defines model for inQuerySlaves.
 type InQuerySlaves = []string
 
+// InQuerySourceClusterID defines model for inQuerySourceClusterID.
+type InQuerySourceClusterID = string
+
+// InQuerySourceObjectID defines model for inQuerySourceObjectID.
+type InQuerySourceObjectID = string
+
 // InQueryStateOnly defines model for inQueryStateOnly.
 type InQueryStateOnly = bool
 
@@ -4483,6 +4616,9 @@ type Wait = string
 
 // WaitLocal defines model for inQueryWaitLocal.
 type WaitLocal = bool
+
+// InQueryWaitRestore defines model for inQueryWaitRestore.
+type InQueryWaitRestore = string
 
 // N200 defines model for 200.
 type N200 = Problem
@@ -5336,6 +5472,22 @@ type PostInstanceActionPGUpdateParams struct {
 	ConfigUpdatedAt *ConfigUpdatedAt `form:"config_updated_at,omitempty" json:"config_updated_at,omitempty"`
 }
 
+// PostInstanceActionPromoteParams defines parameters for PostInstanceActionPromote.
+type PostInstanceActionPromoteParams struct {
+	// AbortRestore End the restore a follow of the replica is running, whatever is left
+	// of it: the replica starts on the snapshot it held before.
+	AbortRestore *InQueryAbortRestore `form:"abort_restore,omitempty" json:"abort_restore,omitempty"`
+
+	// WaitRestore Wait for the restore a follow of the replica is running: a duration,
+	// the longest to wait before ending it, or `end` to wait for its end
+	// however long.
+	WaitRestore *InQueryWaitRestore `form:"wait_restore,omitempty" json:"wait_restore,omitempty"`
+
+	// DryRun Answer what the promotion would do, and do nothing.
+	DryRun *InQueryPromoteDryRun `form:"dry_run,omitempty" json:"dry_run,omitempty"`
+	Force  *InQueryForce         `form:"force,omitempty" json:"force,omitempty"`
+}
+
 // PostInstanceActionProvisionParams defines parameters for PostInstanceActionProvision.
 type PostInstanceActionProvisionParams struct {
 	Slaves          *InQueryAllSlaves       `form:"slaves,omitempty" json:"slaves,omitempty"`
@@ -6169,6 +6321,22 @@ type PostObjectActionDeleteParams struct {
 	Force *InQueryForce `form:"force,omitempty" json:"force,omitempty"`
 }
 
+// PostObjectActionPromoteParams defines parameters for PostObjectActionPromote.
+type PostObjectActionPromoteParams struct {
+	// AbortRestore End the restore a follow of the replica is running, whatever is left
+	// of it: the replica starts on the snapshot it held before.
+	AbortRestore *InQueryAbortRestore `form:"abort_restore,omitempty" json:"abort_restore,omitempty"`
+
+	// WaitRestore Wait for the restore a follow of the replica is running: a duration,
+	// the longest to wait before ending it, or `end` to wait for its end
+	// however long.
+	WaitRestore *InQueryWaitRestore `form:"wait_restore,omitempty" json:"wait_restore,omitempty"`
+
+	// DryRun Answer what the promotion would do, and do nothing.
+	DryRun *InQueryPromoteDryRun `form:"dry_run,omitempty" json:"dry_run,omitempty"`
+	Force  *InQueryForce         `form:"force,omitempty" json:"force,omitempty"`
+}
+
 // PostObjectActionProvisionParams defines parameters for PostObjectActionProvision.
 type PostObjectActionProvisionParams struct {
 	// Adopt Take over the system resources found holding what the provision would
@@ -6180,6 +6348,21 @@ type PostObjectActionProvisionParams struct {
 // PostObjectActionPurgeParams defines parameters for PostObjectActionPurge.
 type PostObjectActionPurgeParams struct {
 	Force *InQueryForce `form:"force,omitempty" json:"force,omitempty"`
+}
+
+// PostObjectActionReplicaParams defines parameters for PostObjectActionReplica.
+type PostObjectActionReplicaParams struct {
+	// Store The store, as a store keyword names it: a name for a store of the
+	// cluster configuration, from <sec> store#<name> for one of a sec.
+	Store *InQueryStore `form:"store,omitempty" json:"store,omitempty"`
+
+	// SourceClusterId The id of the cluster running the object to follow, with
+	// source_object_id, when the store does not record it as the primary
+	// of this object.
+	SourceClusterId *InQuerySourceClusterID `form:"source_cluster_id,omitempty" json:"source_cluster_id,omitempty"`
+
+	// SourceObjectId The id of the object to follow, with source_cluster_id.
+	SourceObjectId *InQuerySourceObjectID `form:"source_object_id,omitempty" json:"source_object_id,omitempty"`
 }
 
 // PostObjectActionResizeParams defines parameters for PostObjectActionResize.

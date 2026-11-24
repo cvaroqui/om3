@@ -121,3 +121,78 @@ func TestConfigDigest(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, a, d, "a value changed")
 }
+
+// A promotion records the cluster promoted as the primary under the
+// identity of the source it takes over from, and under its own: each cluster
+// reads the document kept under its own identity. The way back is another
+// promotion, of the former source over the cluster promoted, one epoch
+// later. A promotion asked again keeps its epoch.
+func TestPromoteThereAndBack(t *testing.T) {
+	ctx := context.Background()
+	docs := memDocs{}
+	prod := Primary{ClusterID: "prod-id", ClusterName: "prod", ObjectID: "oa"}
+	drp := Primary{ClusterID: "drp-id", ClusterName: "drp", ObjectID: "ob", PromotedFromRun: "run1"}
+
+	_, found, err := ReadPrimary(ctx, docs, "prod-id", "oa")
+	require.NoError(t, err)
+	assert.False(t, found, "an object nobody was promoted over records no primary")
+
+	p, err := Promote(ctx, docs, "prod-id", "oa", drp)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, p.Epoch)
+	assert.False(t, p.PromotedAt.IsZero())
+	for _, id := range [][2]string{{"prod-id", "oa"}, {"drp-id", "ob"}} {
+		got, found, err := ReadPrimary(ctx, docs, id[0], id[1])
+		require.NoError(t, err)
+		require.True(t, found, "%v", id)
+		assert.True(t, got.Names("drp-id"), "%v", id)
+		assert.False(t, got.Names("prod-id"), "%v", id)
+		assert.Equal(t, "ob", got.ObjectID, "the source finds the object to follow")
+		assert.Equal(t, "run1", got.PromotedFromRun)
+	}
+
+	// Asked again, as after a failure between the record and the rest.
+	again, err := Promote(ctx, docs, "prod-id", "oa", drp)
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, again.Epoch, "a promotion asked again is the same promotion")
+	assert.True(t, again.PromotedAt.Equal(p.PromotedAt))
+
+	// The record of the cluster promoted lost: asking again writes it.
+	delete(docs, "drp-id/ob/primary")
+	_, err = Promote(ctx, docs, "prod-id", "oa", drp)
+	require.NoError(t, err)
+	_, found, err = ReadPrimary(ctx, docs, "drp-id", "ob")
+	require.NoError(t, err)
+	assert.True(t, found)
+
+	// Back: the former source, a replica of the cluster promoted, is
+	// promoted over it.
+	prod.PromotedFromRun = "run9"
+	back, err := Promote(ctx, docs, "drp-id", "ob", prod)
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, back.Epoch)
+	for _, id := range [][2]string{{"prod-id", "oa"}, {"drp-id", "ob"}} {
+		got, _, err := ReadPrimary(ctx, docs, id[0], id[1])
+		require.NoError(t, err)
+		assert.True(t, got.Names("prod-id"), "%v", id)
+		assert.EqualValues(t, 2, got.Epoch, "%v", id)
+	}
+
+	_, err = Promote(ctx, docs, "prod-id", "oa", prod)
+	assert.ErrorContains(t, err, "over itself")
+}
+
+// A primary that can not be read is an error: a cluster not knowing who
+// writes the runs is told so, and neither that it does nor that nobody was
+// promoted.
+func TestReadPrimaryUnreadable(t *testing.T) {
+	ctx := context.Background()
+	docs := memDocs{"c/o/primary": []byte("{")}
+	_, found, err := ReadPrimary(ctx, docs, "c", "o")
+	assert.Error(t, err)
+	assert.False(t, found)
+	docs["c/o/primary"] = []byte("{}")
+	_, found, err = ReadPrimary(ctx, docs, "c", "o")
+	assert.ErrorContains(t, err, "names no cluster")
+	assert.False(t, found)
+}

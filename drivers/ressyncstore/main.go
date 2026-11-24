@@ -20,6 +20,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/opensvc/om3/v3/core/client"
 	"github.com/opensvc/om3/v3/core/datarecv"
 	"github.com/opensvc/om3/v3/core/driver"
+	"github.com/opensvc/om3/v3/core/env"
 	"github.com/opensvc/om3/v3/core/keyop"
 	"github.com/opensvc/om3/v3/core/naming"
 	"github.com/opensvc/om3/v3/core/object"
@@ -56,6 +58,7 @@ type (
 		IncludeRefs bool
 		Snapshot    string
 		Stage       string
+		PromoteWait *time.Duration
 		ObjectID    uuid.UUID
 
 		// replicas are the replicas of the object the last status
@@ -513,7 +516,21 @@ func apartUnder(dir string, objectHeads []head, mounts []string) []string {
 // Update writes a run: every head, and the configuration of the object.
 func (t *T) Update(ctx context.Context) error {
 	_, err := t.update(ctx)
-	if errors.Is(err, errPassive) {
+	return t.quietly(err)
+}
+
+// quietly returns the error of an update, but the ones that are no failure:
+// the node is not the one writing the runs, or its cluster no longer is and
+// the schedule asks. A cluster another one was promoted over stays so until
+// an operator makes its object a replica: its schedule failing at every
+// period would say nothing its resource does not warn of already. Asked by
+// hand, the update says why it writes nothing.
+func (t *T) quietly(err error) error {
+	switch {
+	case errors.Is(err, errPassive):
+		return nil
+	case errors.Is(err, errNotPrimary) && env.HasDaemonSchedulerOrigin():
+		t.Log().Infof("skip the scheduled run: %s", err)
 		return nil
 	}
 	return err
@@ -526,7 +543,7 @@ func (t *T) Full(ctx context.Context) error {
 	case errors.Is(err, errPassive):
 		return nil
 	case err != nil:
-		return err
+		return t.quietly(err)
 	}
 	s, err := t.store()
 	if err != nil {
@@ -572,6 +589,9 @@ func (t *T) update(ctx context.Context) (backup.Run, error) {
 		return run, err
 	}
 	defer s.Close()
+	if err := t.mayWriteRuns(ctx, s, run.ClusterID); err != nil {
+		return run, err
+	}
 	retention, err := t.retention(s)
 	if err != nil {
 		return run, err
@@ -936,6 +956,18 @@ func (t *T) Status(ctx context.Context) status.T {
 	defer s.Close()
 	if _, err := t.retention(s); err != nil {
 		t.StatusLog().Error("%s", err)
+		return status.Warn
+	}
+	clusterID, _ := t.cluster()
+	primary, recorded, err := t.recordedPrimary(ctx, s, clusterID)
+	switch {
+	case err != nil:
+		t.StatusLog().Warn("the primary of the object can not be read in store %s: %s", s.Ref(), err)
+		return status.Warn
+	case recorded && !primary.Names(clusterID):
+		// The object runs here, and the store says another cluster
+		// took over: nothing it writes is saved.
+		t.StatusLog().Warn("%s", t.fencedBy(primary, s))
 		return status.Warn
 	}
 	state := t.StatusLastSync([]string{lastSyncName}, false)

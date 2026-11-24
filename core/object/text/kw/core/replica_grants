@@ -6,6 +6,7 @@ asking for them. Each is judged as a configuration that requester would
 write: a keyword change these grants do not allow is refused, the
 configuration is not applied, and the replica says so to its source.
 
-`deploy --store <store> --snapshot <id> --replica` sets it, with
-`replica_of`. The daemon writes it, and nobody but root changes or unsets
-it.
+`deploy --store <store> --snapshot <id> --replica` and `replica --of
+<store>` set it, with `replica_of`. The daemon writes it, and nobody but
+root changes or unsets it: the promotion of the replica takes it away with
+`replica_of`.

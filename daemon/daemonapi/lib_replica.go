@@ -3,7 +3,6 @@ package daemonapi
 import (
 	"fmt"
 	"net/http"
-	"slices"
 
 	"github.com/labstack/echo/v4"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/opensvc/om3/v3/core/xconfig"
 	"github.com/opensvc/om3/v3/daemon/rbac"
 	"github.com/opensvc/om3/v3/util/hostname"
+	"github.com/opensvc/om3/v3/util/key"
 )
 
 // followedConfig returns the configuration body, the one a run of its source
@@ -53,21 +53,22 @@ func followedConfig(ctx echo.Context, p naming.Path, body []byte) ([]byte, int, 
 	return body, 0, nil
 }
 
-// replicaHostedHere refuses the configuration body of the replica p when its
-// drpnodes do not name this node: the instances of a replica are its
-// drpnodes, and a configuration naming none of this cluster, or no longer
-// this node, would leave the replica with no instance to follow from.
+// replicaHostedHere refuses the configuration body of the replica p when
+// neither its drpnodes nor its nodes name this node: a replica has its
+// instances on the nodes of its cluster the configuration of its source
+// names, its drpnodes, or its nodes for the object a replica was promoted
+// over, and a configuration naming none of this cluster, or no longer this
+// node, would leave the replica with no instance to follow from. A nodes
+// keyword naming no node of the cluster falls back on the node evaluating
+// it, which is not naming it.
 func replicaHostedHere(p naming.Path, body []byte) error {
 	oc, err := object.NewConfigurer(p, object.WithConfigData(body), object.WithVolatile(true))
 	if err != nil {
 		return err
 	}
-	drpNodes, err := evalNodes(oc.Config())
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(drpNodes, hostname.Hostname()) {
-		return fmt.Errorf("the drpnodes of the configuration, %v, do not name %s: the instances of a replica are the drpnodes, nodes of this cluster", drpNodes, hostname.Hostname())
+	cfg := oc.Config()
+	if !object.HostedOn(cfg, hostname.Hostname()) {
+		return fmt.Errorf("the drpnodes of the configuration, %q, do not name %s, nor its nodes: the instances of a replica are on the nodes of this cluster the configuration names, its drpnodes on a recovery cluster", cfg.Get(key.New("DEFAULT", "drpnodes")), hostname.Hostname())
 	}
 	return nil
 }

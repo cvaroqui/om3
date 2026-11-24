@@ -4776,6 +4776,53 @@ paths:
         - node / instance / svc
         - node / instance / vol
 
+  /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/action/promote:
+    post:
+      description: |
+        Settle the restore a follow of the replica is running on the node,
+        for the promotion of the object: wait for it or end it, as the
+        promote_wait keyword of the resource following and the options say,
+        and check the heads hold a snapshot whole. It records no primary,
+        changes no configuration and starts nothing: the promotion of the
+        object asks it of each node of a replica keeping a copy per node,
+        before it records the primary. Needs the admin grant of the
+        namespace.
+      operationId: PostInstanceActionPromote
+      parameters:
+        - $ref: '#/components/parameters/inPathNodeName'
+        - $ref: '#/components/parameters/inPathNamespace'
+        - $ref: '#/components/parameters/inPathKind'
+        - $ref: '#/components/parameters/inPathName'
+        - $ref: '#/components/parameters/inQueryAbortRestore'
+        - $ref: '#/components/parameters/inQueryWaitRestore'
+        - $ref: '#/components/parameters/inQueryPromoteDryRun'
+        - $ref: '#/components/parameters/inQueryForce'
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Promotion'
+          description: OK
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+        403:
+          $ref: '#/components/responses/403'
+        408:
+          $ref: '#/components/responses/408'
+        409:
+          $ref: '#/components/responses/409'
+        500:
+          $ref: '#/components/responses/500'
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      tags:
+        - node / instance / svc
+        - node / instance / vol
+
   /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/action/resync:
     post:
       description: Restore optimal synchronization of the object instance.
@@ -6925,6 +6972,106 @@ paths:
           $ref: '#/components/responses/408'
         409:
           $ref: '#/components/responses/409OrchestrationRefused'
+        500:
+          $ref: '#/components/responses/500'
+
+  /api/object/path/{namespace}/{kind}/{name}/action/promote:
+    post:
+      description: |
+        Promote a replica: make of it the object running, its source lost.
+
+        The node asked settles the restore a follow may be running, by
+        waiting for it or ending it as the promote_wait keyword of the
+        resource following and the options say, on every node of a replica
+        keeping a copy per node, records its cluster in the store as the
+        primary of the object, which the source reads before each of its
+        runs and then writes none, takes the replica_of and replica_grants
+        keywords away, and orchestrates the start of the object. The answer
+        says what was found, decided and done, and the orchestration to wait
+        for.
+
+        Needs the admin grant of the namespace: it is the one request an
+        administrator has these keywords, which only root writes, unset by.
+        Refused for an object that is not a replica.
+      operationId: PostObjectActionPromote
+      tags:
+        - object / svc
+        - object / vol
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/inPathNamespace'
+        - $ref: '#/components/parameters/inPathKind'
+        - $ref: '#/components/parameters/inPathName'
+        - $ref: '#/components/parameters/inQueryAbortRestore'
+        - $ref: '#/components/parameters/inQueryWaitRestore'
+        - $ref: '#/components/parameters/inQueryPromoteDryRun'
+        - $ref: '#/components/parameters/inQueryForce'
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Promotion'
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+        403:
+          $ref: '#/components/responses/403'
+        404:
+          $ref: '#/components/responses/404'
+        408:
+          $ref: '#/components/responses/408'
+        409:
+          $ref: '#/components/responses/409'
+        500:
+          $ref: '#/components/responses/500'
+
+  /api/object/path/{namespace}/{kind}/{name}/action/replica:
+    post:
+      description: |
+        Make of an object the replica of the object another cluster runs,
+        as the object a cluster ran before a replica of it was promoted
+        over it: it takes the configuration of the latest snapshot of its
+        source, judged as a write of the requester, the daemon sets its
+        replica_of and replica_grants keywords, the grants of the requester,
+        and its sync.store resource follows the source from then on.
+
+        The source is the object the store records as the primary of this
+        one, or the one source_cluster_id and source_object_id name.
+        Refused while a resource using the heads of the object is up, and
+        for an object that is a replica already. Needs the admin grant of
+        the namespace, here and on the namespace of the object followed.
+      operationId: PostObjectActionReplica
+      tags:
+        - object / svc
+        - object / vol
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/inPathNamespace'
+        - $ref: '#/components/parameters/inPathKind'
+        - $ref: '#/components/parameters/inPathName'
+        - $ref: '#/components/parameters/inQueryStore'
+        - $ref: '#/components/parameters/inQuerySourceClusterID'
+        - $ref: '#/components/parameters/inQuerySourceObjectID'
+      responses:
+        204:
+          description: OK
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+        403:
+          $ref: '#/components/responses/403'
+        404:
+          $ref: '#/components/responses/404'
+        409:
+          $ref: '#/components/responses/409'
         500:
           $ref: '#/components/responses/500'
 
@@ -12285,6 +12432,157 @@ components:
         - start
       default: no
 
+    Promotion:
+      description: |
+        What the promotion of a replica found, decided and did.
+      type: object
+      required:
+        - path
+        - node
+        - action
+        - reason
+        - dry_run
+      properties:
+        path:
+          type: string
+        node:
+          description: the node that settled the restore and recorded the primary
+          type: string
+        store:
+          description: the store the replica followed its source in
+          type: string
+        source_cluster_id:
+          type: string
+          x-go-name: SourceClusterID
+        source_object_id:
+          type: string
+          x-go-name: SourceObjectID
+        held_run_id:
+          description: |
+            the snapshot of the source the heads held whole when the promotion
+            was asked, empty when they held none
+          type: string
+          x-go-name: HeldRunID
+        held_run_created_at:
+          description: when the source began that snapshot, on the clock of the source
+          type: string
+          format: date-time
+        held_run_seen_at:
+          description: when the node first listed that snapshot, on its own clock
+          type: string
+          format: date-time
+        restore:
+          $ref: '#/components/schemas/PromotionRestore'
+        promote_wait:
+          description: the promote_wait of the resource following
+          type: string
+        action:
+          description: |
+            what the promotion does of the restore in flight: proceed when
+            there is none, wait for it, abort it, or refuse to choose
+          type: string
+          enum:
+            - proceed
+            - wait
+            - abort
+            - refuse
+        wait_for:
+          description: the longest a wait lasts, none for the end of the restore
+          type: string
+        reason:
+          type: string
+        override:
+          description: the options having the promotion do otherwise
+          type: string
+        dry_run:
+          type: boolean
+        waited:
+          description: how long the promotion waited for the restore
+          type: string
+        aborted:
+          description: true when the promotion ended the restore
+          type: boolean
+        from_run_id:
+          description: the snapshot of the source the object starts on
+          type: string
+          x-go-name: FromRunID
+        epoch:
+          description: the count of promotions the store records for the object
+          type: integer
+          format: uint64
+        orchestration_id:
+          description: the orchestration starting the object
+          type: string
+          format: uuid
+          x-go-name: OrchestrationID
+        orchestration_node:
+          description: the node that accepted the orchestration
+          type: string
+        followers:
+          description: |
+            what the other nodes of a replica keeping a copy per node did of
+            their own restore in flight, each settled before the primary is
+            recorded
+          type: array
+          items:
+            $ref: '#/components/schemas/Promotion'
+        skipped_nodes:
+          description: |
+            the nodes of the replica the promotion could not reach to settle
+            their restore, and went on without
+          type: array
+          items:
+            type: string
+        orchestration_refused:
+          description: |
+            why no orchestration starts the object, promoted nonetheless, as
+            an object frozen: start it once fixed
+          type: string
+
+    PromotionRestore:
+      description: |
+        A restore writing the heads of a replica as its promotion is asked,
+        every time and duration on the clock of the node restoring.
+      type: object
+      required:
+        - run_id
+        - pid
+        - started_at
+        - bytes_total
+        - bytes_done
+        - percent
+        - in_place
+      properties:
+        run_id:
+          type: string
+          x-go-name: RunID
+        pid:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        bytes_total:
+          type: integer
+          format: int64
+        bytes_done:
+          type: integer
+          format: int64
+        percent:
+          type: number
+          format: double
+        bytes_per_second:
+          description: the throughput since the restore began, none before its first byte
+          type: number
+          format: double
+        remaining:
+          description: what is left at that throughput, none while nothing says
+          type: string
+        in_place:
+          description: |
+            true when the restore writes a head in place, which ending it
+            would leave incomplete
+          type: boolean
+
     OrchestrationQueued:
       type: object
       properties:
@@ -14768,6 +15066,49 @@ components:
       schema:
         type: boolean
         description: Dereference, scope and convert the keyword raw value.
+
+    inQueryAbortRestore:
+      in: query
+      name: abort_restore
+      description: |
+        End the restore a follow of the replica is running, whatever is left
+        of it: the replica starts on the snapshot it held before.
+      schema:
+        type: boolean
+
+    inQueryWaitRestore:
+      in: query
+      name: wait_restore
+      description: |
+        Wait for the restore a follow of the replica is running: a duration,
+        the longest to wait before ending it, or `end` to wait for its end
+        however long.
+      schema:
+        type: string
+
+    inQueryPromoteDryRun:
+      in: query
+      name: dry_run
+      description: Answer what the promotion would do, and do nothing.
+      schema:
+        type: boolean
+
+    inQuerySourceClusterID:
+      in: query
+      name: source_cluster_id
+      description: |
+        The id of the cluster running the object to follow, with
+        source_object_id, when the store does not record it as the primary
+        of this object.
+      schema:
+        type: string
+
+    inQuerySourceObjectID:
+      in: query
+      name: source_object_id
+      description: The id of the object to follow, with source_cluster_id.
+      schema:
+        type: string
 
     inQueryForce:
       in: query

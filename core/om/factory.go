@@ -3076,6 +3076,31 @@ object that is not a replica is refused.`,
 	return cmd
 }
 
+// newCmdObjectInstancePromote is the step of a promotion the daemon runs on
+// a node, in a process of its own: it is not a command an operator asks,
+// who promotes the object, and is kept out of the help.
+func newCmdObjectInstancePromote(kind string) *cobra.Command {
+	var options commands.CmdObjectInstancePromote
+	cmd := &cobra.Command{
+		Use:    "promote",
+		Short:  "settle the restore of a replica instance and record the primary, for the promotion of the object",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return options.Run(kind)
+		},
+	}
+	flags := cmd.Flags()
+	addFlagsGlobal(flags, &options.OptsGlobal)
+	flags.BoolVar(&options.AbortRestore, "abort-restore", false, "end the restore in flight")
+	flags.StringVar(&options.WaitRestore, "wait-restore", "", "wait for the restore in flight, the duration given at most, or for its end when given none")
+	flags.Lookup("wait-restore").NoOptDefVal = commands.WaitRestoreEnd
+	flags.BoolVar(&options.DryRun, "dry-run", false, "say what would be done, and change nothing")
+	flags.BoolVar(&options.Force, "force", false, "take the heads as they are")
+	flags.BoolVar(&options.SettleOnly, "settle-only", false, "settle the restore in flight, and record no primary")
+	return cmd
+}
+
 func newCmdObjectSyncRestore(kind string) *cobra.Command {
 	var options commands.CmdObjectInstanceRestore
 	cmd := commoncmd.NewCmdObjectSyncRestore(kind)

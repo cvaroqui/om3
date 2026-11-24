@@ -401,6 +401,10 @@ func (t *T) FollowConfig(ctx context.Context) (bool, error) {
 }
 
 func (t *T) followConfig(ctx context.Context, s backup.Store, src backup.ReplicaSource, env followEnv) (bool, error) {
+	if promotedHere(ctx, s, src, env.clusterID) {
+		// The promotion is to finish, the heads its own.
+		return false, nil
+	}
 	latest, found, err := latestOfSource(ctx, s, src)
 	if err != nil {
 		return false, err
@@ -573,6 +577,9 @@ func (t *T) FollowPending(ctx context.Context) (bool, error) {
 	}
 	defer s.Close()
 	env := t.followEnv(s)
+	if promotedHere(ctx, s, src, env.clusterID) {
+		return false, nil
+	}
 	latest, found, err := latestOfSource(ctx, s, src)
 	if err != nil || !found {
 		return false, err
@@ -604,6 +611,14 @@ func (t *T) Follow(ctx context.Context) error {
 }
 
 func (t *T) followHeads(ctx context.Context, s backup.Store, src backup.ReplicaSource, env followEnv) error {
+	if promotedHere(ctx, s, src, env.clusterID) {
+		// A promotion recorded this cluster as the primary, and did
+		// not go on to make of the replica an object of its own: its
+		// heads are the ones the object starts on, which a follow
+		// would write a run of the cluster taken over from into.
+		t.Log().Infof("nothing to follow: store %s records this cluster as the primary of the object, promoted: finish the promotion with 'om %s promote'", s.Ref(), t.Path)
+		return nil
+	}
 	latest, found, err := latestOfSource(ctx, s, src)
 	if err != nil {
 		return err
@@ -749,6 +764,10 @@ func (t *T) statusFollow(ctx context.Context, src backup.ReplicaSource) status.T
 		if err := saveFollowRecord(file, rec); err != nil {
 			t.StatusLog().Warn("record the latest run of the source: %s", err)
 		}
+	}
+	if clusterID, _ := t.cluster(); promotedHere(ctx, s, src, clusterID) {
+		t.StatusLog().Warn("store %s records this cluster as the primary of the object, and the object is a replica still: it no longer follows, finish its promotion with 'om %s promote'", s.Ref(), t.Path)
+		return status.Warn
 	}
 	v := judgeFollow(now, rec, latest, found, t.startedConsumers(ctx), t.GetMaxDelay, t.MaxDelayOrigin())
 	if !v.rpoBreach.IsZero() {

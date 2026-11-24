@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/opensvc/om3/v3/core/backup"
+	"github.com/opensvc/om3/v3/core/object"
 	"github.com/opensvc/om3/v3/core/resource"
 	"github.com/opensvc/om3/v3/core/status"
 	"github.com/opensvc/om3/v3/core/xconfig"
@@ -231,13 +232,25 @@ func (t *T) statusReplicas(ctx context.Context, s backup.Store) status.T {
 }
 
 // expectsReplica says the object expects a replica: its configuration names
-// drpnodes, the nodes of another cluster a replica of it runs on.
+// the nodes of its other site, the ones of another cluster a replica of it
+// runs on. They are the drpnodes for an object running on its nodes, and
+// the nodes for one running on its drpnodes, as a replica promoted does.
 func (t *T) expectsReplica() bool {
 	cfg := t.objectConfig()
 	if cfg == nil {
 		return false
 	}
-	return strings.TrimSpace(cfg.Get(key.New("DEFAULT", "drpnodes"))) != ""
+	return strings.TrimSpace(cfg.Get(key.New("DEFAULT", t.otherSite()))) != ""
+}
+
+// otherSite returns the keyword naming the nodes of the site the object
+// does not run on: the drpnodes, or the nodes for an object running on its
+// drpnodes.
+func (t *T) otherSite() string {
+	if cfg := t.objectConfig(); cfg != nil && object.ScopeKey(cfg).Option == "drpnodes" {
+		return "nodes"
+	}
+	return "drpnodes"
 }
 
 // statusReplicasOf judges the replicas of the object, an object of the
@@ -262,7 +275,7 @@ func (t *T) statusReplicasOf(ctx context.Context, s backup.Store, clusterID stri
 	}
 	if len(receipts) == 0 {
 		if expected && err == nil {
-			t.StatusLog().Warn("no replica acknowledged a run: the drpnodes of the object expect one, created with 'deploy --store %s --snapshot %s --replica' on their cluster", s.Ref(), t.Path)
+			t.StatusLog().Warn("no replica acknowledged a run: the %s of the object expect one, created with 'deploy --store %s --snapshot %s --replica' on their cluster", t.otherSite(), s.Ref(), t.Path)
 			return status.Warn
 		}
 		return status.NotApplicable

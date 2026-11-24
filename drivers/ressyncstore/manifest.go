@@ -69,6 +69,16 @@ var (
 			Text:       keywords.NewText(fs, "text/kw/stage"),
 		},
 		{
+			Attr:      "PromoteWait",
+			Converter: converters.Duration,
+			Default:   "0",
+			Example:   "5m",
+			Option:    "promote_wait",
+			Group:     ressync.GroupTransfer.ID,
+			Scopable:  true,
+			Text:      keywords.NewText(fs, "text/kw/promote_wait"),
+		},
+		{
 			Attr:    "Keep",
 			Example: "24h 7d 4w 6m",
 			Option:  "keep",

@@ -372,6 +372,7 @@ var rules = map[string]Group{
 			"keep":         {},
 			"log":          {},
 			"max_delay":    {},
+			"promote_wait": {},
 			"rids":         {},
 			"schedule":     {},
 			"stage":        {},
@@ -690,8 +691,12 @@ var rules = map[string]Group{
 			// object its author may not read, and the second would have
 			// them judged under grants its author does not hold. Unset,
 			// the object is no longer a replica: the daemon would start
-			// it, beside its source, so taking them away is root's too,
-			// until a promotion does it knowing the source lost.
+			// it, beside its source, so taking them away is root's too.
+			// The promotion of the replica takes them away for an
+			// administrator of the namespace, out of this policy: the
+			// daemon writes the configuration itself, once the store
+			// records the cluster as the primary, which keeps the source
+			// from writing beside it.
 			"replica_of": {
 				Grant:  rbac.GrantRoot,
 				Reason: reasonRoot,

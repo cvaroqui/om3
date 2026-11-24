@@ -33,6 +33,9 @@ func (t *actor) lockedStart(ctx context.Context) error {
 	if err := t.checkReplicaStart(ctx); err != nil {
 		return err
 	}
+	if err := t.checkFencedStart(ctx); err != nil {
+		return err
+	}
 	if err := file.Touch(t.lastStartFile(), time.Now()); err != nil {
 		return err
 	}

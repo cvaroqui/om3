@@ -20,3 +20,8 @@ the object, created there with `deploy --store --snapshot --replica`. Not
 nodes of the cluster the object runs on, they evaluate to none there. On
 the cluster of the replica, they are the nodes hosting its instances, and a
 keyword scoped `@drpnodes` holds the value the replica reads.
+
+A node that is one of the `drpnodes` and none of the `nodes` reads the
+`drpnodes` as the nodes hosting the instances of the object, and the values
+scoped `@drpnodes`: the same configuration runs on the `nodes` and on the
+`drpnodes`, and the promotion of a replica changes neither.

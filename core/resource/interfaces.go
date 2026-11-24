@@ -324,6 +324,84 @@ type (
 		Follow(context.Context) error
 	}
 
+	// Promoter is a sync resource of a replica following the runs of its
+	// source, which a promotion of the replica asks what it holds, and has
+	// record its cluster as the one writing the runs from then on.
+	Promoter interface {
+		// PromotionState says what the resource holds of its source,
+		// and false for a resource following none.
+		PromotionState(context.Context) (PromotionState, bool, error)
+
+		// RecordPrimary records the cluster of the node as the primary
+		// of the object in the store, taking over from the source
+		// followed, the heads holding the run fromRunID, and returns
+		// what it recorded.
+		RecordPrimary(ctx context.Context, fromRunID string) (PrimaryRecord, error)
+	}
+
+	// Fencer is a sync resource writing the snapshots of the object into
+	// a store recording which cluster runs it, of the clusters of two
+	// sites taking turns.
+	Fencer interface {
+		// FencedBy says why the object does not run on this cluster,
+		// naming the cluster the store records as its primary and
+		// the store, and nothing when the store records none, or this
+		// one.
+		FencedBy(context.Context) (string, error)
+	}
+
+	// PromotionState is what a resource following a source says to the
+	// promotion of its replica.
+	PromotionState struct {
+		// Store is the store followed, and SourceClusterID and
+		// SourceObjectID the object followed in it.
+		Store           string
+		SourceClusterID string
+		SourceObjectID  string
+
+		// HeldRunID is the run of the source the heads hold whole,
+		// empty when they hold none: it was begun at
+		// HeldRunCreatedAt, on the clock of the source, and first
+		// listed by this node at HeldRunSeenAt, on its own.
+		HeldRunID        string
+		HeldRunCreatedAt time.Time
+		HeldRunSeenAt    time.Time
+
+		// Restore is the restore writing the heads now, nil when
+		// none does.
+		Restore *RestoreInFlight
+
+		// PromoteWait is how long a promotion waits for a restore
+		// that ends within it, as the promote_wait keyword says.
+		PromoteWait time.Duration
+
+		// Primary is the primary the store records for the source,
+		// nil when it records none: the source is then its own.
+		Primary *PrimaryRecord
+	}
+
+	// RestoreInFlight is a restore writing the heads of the object, as
+	// its progress file tells, every time on the clock of this node.
+	RestoreInFlight struct {
+		RunID      string
+		SessionID  string
+		PID        int
+		StartedAt  time.Time
+		UpdatedAt  time.Time
+		BytesTotal int64
+		BytesDone  int64
+	}
+
+	// PrimaryRecord is the primary of an object, as a store records it.
+	PrimaryRecord struct {
+		ClusterID       string
+		ClusterName     string
+		ObjectID        string
+		Epoch           uint64
+		PromotedFromRun string
+		PromotedAt      time.Time
+	}
+
 	// SnapshotLister is a sync resource holding restorable points in
 	// time.
 	SnapshotLister interface {

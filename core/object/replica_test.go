@@ -83,14 +83,52 @@ func TestReplicaNodesAreTheDRPNodes(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, alerts.HasError(), "nodes unknown to this cluster do not break a replica: %s", alerts.Errors())
 
-	// The same configuration on a cluster that is not told it is a
-	// replica: the object is the cluster's own.
+	// The same configuration with nothing saying it is a replica, as
+	// once promoted: the node is one of its drpnodes still, and none of
+	// its nodes, and reads the configuration the same.
 	o, err = object.NewSvc(p, object.WithConfigData(replicaConfig("")), object.WithVolatile(true))
 	require.NoError(t, err)
-	assert.Equal(t, "nodes", object.ScopeKey(o.Config()).Option)
+	assert.Equal(t, "drpnodes", object.ScopeKey(o.Config()).Option)
 	nodes, err = o.Nodes()
 	require.NoError(t, err)
-	assert.Equal(t, []string{hostname.Hostname()}, nodes)
+	assert.Empty(t, nodes)
+	assert.Equal(t, "drp", o.Config().GetString(key.Parse("env.site")))
+}
+
+// A node reads the list of nodes it is in, as OpenSVC v2 computed the peers
+// of a service: the nodes for one of the nodes, the drpnodes for one of the
+// drpnodes, a replica or not. A node in both is one of the nodes, and so is
+// one in neither, which the nodes keyword falls back on.
+func TestScopeKeyFollowsTheNode(t *testing.T) {
+	setupReplicaCluster(t)
+	p, err := naming.ParsePath("test/svc/scope")
+	require.NoError(t, err)
+	here := hostname.Hostname()
+	for _, tc := range []struct {
+		name, config, scope, site string
+		hosted                    bool
+	}{
+		{"one of the nodes", "nodes = " + here + "\ndrpnodes = d1 d2\n", "nodes", "prod", true},
+		{"one of the drpnodes", "nodes = p1 p2\ndrpnodes = " + here + "\n", "drpnodes", "drp", true},
+		// A node in both reads a value scoped for the drpnodes when
+		// none is scoped for the nodes, as in v2.
+		{"in both", "nodes = " + here + "\ndrpnodes = " + here + "\n", "nodes", "drp", true},
+		{"in neither", "nodes = p1 p2\ndrpnodes = d1 d2\n", "nodes", "prod", false},
+		{"no nodes named", "drpnodes = " + here + "\n", "drpnodes", "drp", true},
+		{"nothing named", "", "nodes", "prod", false},
+	} {
+		for _, replicaOf := range []string{"", "replica_of = " + testReplicaOf + "\nreplica_grants = root\n"} {
+			conf := "[DEFAULT]\n" + tc.config + replicaOf + "\n[env]\nsite = prod\nsite@drpnodes = drp\n"
+			o, err := object.NewSvc(p, object.WithConfigData([]byte(conf)), object.WithVolatile(true))
+			require.NoError(t, err, tc.name)
+			assert.Equal(t, tc.scope, object.ScopeKey(o.Config()).Option, "%s, replica %v", tc.name, replicaOf != "")
+			assert.Equal(t, tc.site, o.Config().GetString(key.Parse("env.site")), "%s, replica %v", tc.name, replicaOf != "")
+			assert.Equal(t, tc.hosted, object.HostedOn(o.Config(), here), "%s", tc.name)
+			scope, err := o.Config().Eval(object.ScopeKey(o.Config()))
+			require.NoError(t, err)
+			assert.Contains(t, scope, here, "%s: the scope of this node names it", tc.name)
+		}
+	}
 }
 
 // The configuration of the source names in its drpnodes nodes of another
@@ -248,4 +286,46 @@ standby = true
 	// Not a replica started: its schedule does not skip it quietly.
 	t.Setenv("OSVC_ACTION_ORIGIN", "daemon/scheduler")
 	assert.Error(t, o.SyncFollow(ctx))
+}
+
+// The promotion of a replica takes away the keywords making it one, and
+// nothing else: the object is then one of this cluster, on the nodes its
+// replica was on, its drpnodes, reading the values it read. The source, made
+// a replica of it, follows that configuration, where its own nodes are the
+// nodes: nothing trades places, there or back.
+func TestPromotedConfigKeepsTheSites(t *testing.T) {
+	setupReplicaCluster(t)
+	p, err := naming.ParsePath("test/svc/replica")
+	require.NoError(t, err)
+
+	body, err := object.PromotedConfig(p, replicaConfig(testReplicaOf))
+	require.NoError(t, err)
+	o, err := object.NewSvc(p, object.WithConfigData(body), object.WithVolatile(true))
+	require.NoError(t, err)
+	cfg := o.Config()
+	assert.False(t, o.IsReplica(), "no longer a replica")
+	assert.Empty(t, cfg.Get(object.KeyReplicaOf))
+	assert.Empty(t, cfg.Get(object.KeyReplicaGrants))
+	assert.Equal(t, "p1 p2", cfg.Get(key.Parse("nodes")), "the nodes are the ones of the source still")
+	assert.Equal(t, hostname.Hostname(), cfg.Get(key.Parse("drpnodes")))
+	assert.Equal(t, "drpnodes", object.ScopeKey(cfg).Option, "the object runs on its drpnodes")
+	scope, err := cfg.Eval(object.ScopeKey(cfg))
+	require.NoError(t, err)
+	assert.Equal(t, []string{hostname.Hostname()}, scope)
+	assert.Equal(t, "drp", cfg.GetString(key.Parse("env.site")), "the instances read the values they read as a replica")
+	alerts, err := cfg.Validate()
+	require.NoError(t, err)
+	assert.False(t, alerts.HasError(), "%s", alerts.Errors())
+
+	// The way back, as the source reads the same configuration, a
+	// replica in its turn: one of the nodes.
+	back := fmt.Sprintf("[DEFAULT]\nnodes = %s\ndrpnodes = d1 d2\nreplica_of = %s\nreplica_grants = root\n\n[env]\nsite = prod\nsite@drpnodes = drp\n", hostname.Hostname(), testReplicaOf)
+	o, err = object.NewSvc(p, object.WithConfigData([]byte(back)), object.WithVolatile(true))
+	require.NoError(t, err)
+	require.True(t, o.IsReplica())
+	assert.Equal(t, "nodes", object.ScopeKey(o.Config()).Option)
+	assert.Equal(t, "prod", o.Config().GetString(key.Parse("env.site")))
+	nodes, err := o.Nodes()
+	require.NoError(t, err)
+	assert.Equal(t, []string{hostname.Hostname()}, nodes)
 }
