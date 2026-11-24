@@ -12,6 +12,7 @@ import (
 	"github.com/opensvc/om3/v3/core/resource"
 	"github.com/opensvc/om3/v3/core/status"
 	"github.com/opensvc/om3/v3/core/statusbus"
+	"github.com/opensvc/om3/v3/core/topology"
 	"github.com/opensvc/om3/v3/util/hostname"
 	"github.com/opensvc/om3/v3/util/key"
 )
@@ -142,6 +143,9 @@ func (t *actor) acknowledgeProvisionRestore(ctx context.Context, src *provisionR
 		ReplicaClusterID:   clusterID,
 		ReplicaClusterName: clusterName,
 		Node:               hostname.Hostname(),
+		// Each instance of a flex replica holds a copy of its own,
+		// which its node says of.
+		PerNode: t.IsReplica() && t.Topology() == topology.Flex,
 	}
 	if provisionErr != nil {
 		receipt.RestoreError = provisionErr.Error()

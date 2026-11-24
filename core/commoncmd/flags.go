@@ -714,8 +714,9 @@ func FlagTag(flags *pflag.FlagSet, p *string) {
 }
 
 // FlagsCreateFromStore adds the options of a create from a snapshot.
-func FlagsCreateFromStore(flags *pflag.FlagSet, store, snapshot *string) {
+func FlagsCreateFromStore(flags *pflag.FlagSet, store, snapshot *string, replica *bool) {
 	flags.StringVar(store, "store", "", "the store holding the snapshot to create the object from")
+	flags.BoolVar(replica, "replica", false, "create the object as a replica of the object the snapshot is of, an object of another cluster: on its drpnodes, left stopped, following the snapshots of its source on the schedule of its sync.store resource")
 	flags.StringVar(snapshot, "snapshot", "", "the snapshot to create the object from, by id or a prefix of it, or the path of an object for its latest snapshot: its configuration, and its heads restored at provision")
 }
 

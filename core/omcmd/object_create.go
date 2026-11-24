@@ -51,6 +51,10 @@ type (
 		Store    string
 		Snapshot string
 
+		// Replica creates the object as a replica of the object the
+		// snapshot is of, following its snapshots.
+		Replica bool
+
 		client *client.T
 		path   naming.Path
 	}
@@ -231,6 +235,9 @@ func (t *CmdObjectCreate) do() error {
 	if t.Store != "" || t.Snapshot != "" {
 		return t.fromStore()
 	}
+	if t.Replica {
+		return fmt.Errorf("--replica needs --store and --snapshot: a replica is created from a snapshot of the object it follows")
+	}
 	template := t.getTemplate()
 	paths := t.getSourcePaths()
 	pathsCount := len(paths)
@@ -287,7 +294,7 @@ func (t *CmdObjectCreate) fromStore() error {
 		// The daemon reads the snapshot, checks its configuration as any
 		// other, and writes the keys it references with it, taking them
 		// back if the configuration does not land.
-		err := commoncmd.CreateObjectConfigFromStore(ctx, t.client, t.path, t.Store, t.Snapshot, t.Keywords, t.Restore, t.Force, t.createWait(), commoncmd.NewDryRun(t.DryRun, t.Output, t.Color))
+		err := commoncmd.CreateObjectConfigFromStore(ctx, t.client, t.path, t.Store, t.Snapshot, t.Replica, t.Keywords, t.Restore, t.Force, t.createWait(), commoncmd.NewDryRun(t.DryRun, t.Output, t.Color))
 		if !daemonUnreachable(err) {
 			return err
 		}
@@ -327,6 +334,22 @@ func (t *CmdObjectCreate) fromStore() error {
 		}
 	}
 	t.Keywords = append(t.Keywords, fmt.Sprintf("restore_from=%s %s %s", s.Ref(), run.Path, run.ID))
+	if t.Replica {
+		// Written on this node by root, with no daemon to record the
+		// grants of a requester: the configurations the replica
+		// follows are judged as root's.
+		switch {
+		case run.ClusterID == "" || run.ObjectID == "":
+			return errors.Join(fmt.Errorf("snapshot %s does not say the cluster and the object it is of, which a replica follows", run.ShortID()), undo())
+		case run.ClusterID == clusterID:
+			return errors.Join(fmt.Errorf("snapshot %s is of %s on this cluster: a replica is of an object of another cluster", run.ShortID(), run.Path), undo())
+		}
+		src := backup.ReplicaSource{Store: s.Ref(), ClusterID: run.ClusterID, ObjectID: run.ObjectID}
+		t.Keywords = append(t.Keywords,
+			fmt.Sprintf("%s=%s", object.KeyReplicaOf.Option, src),
+			fmt.Sprintf("%s=root", object.KeyReplicaGrants.Option),
+		)
+	}
 	existed, err := objectExists(t.path)
 	if err != nil {
 		return errors.Join(err, undo())

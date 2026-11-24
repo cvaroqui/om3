@@ -200,6 +200,13 @@ func (t *Manager) provisionedFromChecked() {
 	}
 	if t.isProvisioningLeader() {
 		if t.instStatus[t.localhost].Provisioned.IsOneOf(provisioned.NotApplicable, provisioned.True) {
+			if t.isReplica() {
+				// A replica is provisioned stopped: one
+				// provisioned already has nothing left to do.
+				t.log.Infof("provisioned orchestration reached: the replica is provisioned, and left stopped")
+				t.doneAndIdle()
+				return
+			}
 			t.queueAction(t.crmStart, instance.MonitorStateStartProgress, instance.MonitorStateStartSuccess, instance.MonitorStateStartFailure)
 		} else {
 			t.queueAction(t.crmProvisionLeader, instance.MonitorStateProvisionProgress, instance.MonitorStateProvisionSuccess, instance.MonitorStateProvisionFailure)

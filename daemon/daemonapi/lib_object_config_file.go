@@ -18,7 +18,6 @@ import (
 	"github.com/opensvc/om3/v3/daemon/api"
 	"github.com/opensvc/om3/v3/util/file"
 	"github.com/opensvc/om3/v3/util/funcopt"
-	"github.com/opensvc/om3/v3/util/key"
 	"github.com/opensvc/om3/v3/util/pubsub"
 )
 
@@ -170,12 +169,12 @@ func (a *DaemonAPI) writeObjectConfigFile(ctx echo.Context, check *configCheck, 
 
 // configScope is the nodes a configuration is installed on, as the instance
 // config manager reads them: the cluster nodes for the cluster configuration,
-// the nodes keyword for any other.
+// the drpnodes keyword for a replica, the nodes keyword for any other.
 func configScope(p naming.Path, configurer object.Configurer) []string {
 	if p.Kind == naming.KindCcfg {
 		return clusternode.Get()
 	}
-	v, err := configurer.Config().Eval(key.New("DEFAULT", "nodes"))
+	v, err := configurer.Config().Eval(object.ScopeKey(configurer.Config()))
 	if err != nil {
 		return nil
 	}

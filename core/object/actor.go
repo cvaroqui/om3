@@ -95,6 +95,7 @@ type (
 		ResourceHandlingFile(ctx context.Context, filename string) (resource.Driver, error)
 		SetProvisioned(context.Context) error
 		SetUnprovisioned(context.Context) error
+		SyncFollow(context.Context) error
 		SyncFull(context.Context) error
 		SyncResync(context.Context) error
 		SyncRestore(context.Context) error

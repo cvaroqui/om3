@@ -4732,6 +4732,50 @@ paths:
         - node / instance / svc
         - node / instance / vol
 
+  /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/action/follow:
+    post:
+      description: |
+        Bring the instance of a replica to the latest snapshot of the object
+        it is a replica of: the configuration the snapshot saved, judged
+        under the grants recorded when the replica was created, then its
+        heads, the instance left stopped. Refused for an object that is not
+        a replica.
+      operationId: PostInstanceActionFollow
+      parameters:
+        - $ref: '#/components/parameters/inPathNodeName'
+        - $ref: '#/components/parameters/inPathNamespace'
+        - $ref: '#/components/parameters/inPathKind'
+        - $ref: '#/components/parameters/inPathName'
+        - $ref: '#/components/parameters/inQuerySessionID'
+        - $ref: '#/components/parameters/inQueryRid'
+        - $ref: '#/components/parameters/inQuerySubset'
+        - $ref: '#/components/parameters/inQueryTag'
+        - $ref: '#/components/parameters/inQueryConfigUpdatedAt'
+        - $ref: '#/components/parameters/inQueryForce'
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceActionAccepted'
+          description: OK
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+        403:
+          $ref: '#/components/responses/403'
+        409:
+          $ref: '#/components/responses/409'
+        500:
+          $ref: '#/components/responses/500'
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      tags:
+        - node / instance / svc
+        - node / instance / vol
+
   /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/action/resync:
     post:
       description: Restore optimal synchronization of the object instance.
@@ -7867,6 +7911,7 @@ paths:
         - $ref: '#/components/parameters/inQuerySets'
         - $ref: '#/components/parameters/inQueryStore'
         - $ref: '#/components/parameters/inQueryCreateSnapshot'
+        - $ref: '#/components/parameters/inQueryCreateReplica'
         - $ref: '#/components/parameters/inQueryForce'
         - $ref: '#/components/parameters/inQueryConfigDryRun'
       requestBody:
@@ -7932,6 +7977,7 @@ paths:
         - $ref: '#/components/parameters/inQueryWait'
         - $ref: '#/components/parameters/inQueryForce'
         - $ref: '#/components/parameters/inQueryConfigDryRun'
+        - $ref: '#/components/parameters/inQueryConfigFollow'
       requestBody:
         description: OK
         content:
@@ -13516,6 +13562,12 @@ components:
         cluster_id:
           type: string
           description: the id of the cluster keeping the replica
+        node:
+          type: string
+          description: |
+            the node of that cluster holding the copy judged, when the
+            cluster keeps one per node, as the instances of a flex replica,
+            each an entry of its own
         run_id:
           type: string
           description: the run the replica restored last
@@ -15156,6 +15208,35 @@ components:
         snapshot is of.
       schema:
         type: string
+
+    inQueryCreateReplica:
+      in: query
+      name: replica
+      description: |
+        Create the object as a replica of the object the snapshot is of, an
+        object of another cluster: the daemon sets its replica_of keyword,
+        naming the store, the cluster and the object it follows, and its
+        replica_grants keyword, the grants of the requester, which the
+        configurations it follows are judged under. Its instances are the
+        drpnodes of the configuration, the daemon does not start it on its
+        own, and its sync.store resource follows the snapshots of its source
+        on its schedule. Needs store and snapshot.
+      schema:
+        type: boolean
+
+    inQueryConfigFollow:
+      in: query
+      name: follow
+      description: |
+        The configuration is one a replica follows, saved by the object it
+        is a replica of: the daemon keeps what the replica recorded of its
+        own, its id and its replica_of, replica_grants and restore_from
+        keywords, and judges the write under the grants replica_grants
+        recorded when the replica was created, not under the ones of the
+        requester, which must be root: the follow action of the replica
+        asks it. Refused for an object that is not a replica.
+      schema:
+        type: boolean
 
     inQueryRestoreConfig:
       in: query

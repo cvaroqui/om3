@@ -672,6 +672,13 @@ func (t *Manager) onSetInstanceMonitor(c *msgbus.SetInstanceMonitor) {
 			return err
 		}
 
+		if reason := t.replicaRefusal(*c.Value.GlobalExpect); reason != "" {
+			err := fmt.Errorf("%s", reason)
+			t.log.Infof("set instance monitor: %s", err)
+			globalExpectRefused()
+			return err
+		}
+
 		switch *c.Value.GlobalExpect {
 		case instance.MonitorGlobalExpectPlacedAt:
 			options, ok := c.Value.GlobalExpectOptions.(instance.MonitorGlobalExpectOptionsPlacedAt)

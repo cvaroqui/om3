@@ -55,6 +55,7 @@ var (
 		"resource_monitor",
 		"run",
 		"status",
+		"sync_follow",
 		"update",
 	}
 )
@@ -108,6 +109,10 @@ func CmdArgs(e schedule.Entry) ([]string, error) {
 		tail = []string{"instance", "run", "--rid", e.RID()}
 	case "update":
 		tail = []string{"instance", "update", "--rid", e.RID()}
+	case "sync_follow":
+		// The follow of a replica, which the schedule of its sync
+		// resource runs in the place of the update its source runs.
+		tail = []string{"instance", "follow", "--rid", e.RID()}
 	case "pushasset":
 		tail = []string{"push", "asset"}
 	case "pusharray":

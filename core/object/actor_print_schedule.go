@@ -79,6 +79,7 @@ func (t *actor) Schedules() schedule.Table {
 		e.MaxParallel = opts.MaxParallel
 		e.Require = opts.Require
 		e.RequireReplicationSource = opts.RequireReplicationSource
+		e.RequireLeader = opts.RequireLeader
 		e.On = opts.On
 		e.Pace = opts.Pace
 		e.Log = opts.Log

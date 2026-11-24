@@ -4256,11 +4256,17 @@ type InQueryComplianceRuleset = string
 // InQueryConfigDryRun defines model for inQueryConfigDryRun.
 type InQueryConfigDryRun = bool
 
+// InQueryConfigFollow defines model for inQueryConfigFollow.
+type InQueryConfigFollow = bool
+
 // ConfigUpdatedAt defines model for inQueryConfigUpdatedAt.
 type ConfigUpdatedAt = time.Time
 
 // InQueryConfirm defines model for inQueryConfirm.
 type InQueryConfirm = bool
+
+// InQueryCreateReplica defines model for inQueryCreateReplica.
+type InQueryCreateReplica = bool
 
 // InQueryCreateSnapshot defines model for inQueryCreateSnapshot.
 type InQueryCreateSnapshot = string
@@ -5123,6 +5129,31 @@ type PostInstanceActionDeleteParams struct {
 	// Optional. Without it the action runs on whatever configuration the node
 	// holds.
 	ConfigUpdatedAt *ConfigUpdatedAt `form:"config_updated_at,omitempty" json:"config_updated_at,omitempty"`
+}
+
+// PostInstanceActionFollowParams defines parameters for PostInstanceActionFollow.
+type PostInstanceActionFollowParams struct {
+	SessionID *SessionID `form:"session_id,omitempty" json:"session_id,omitempty"`
+
+	// Rid a resource selector expression
+	Rid    *InQueryRid    `form:"rid,omitempty" json:"rid,omitempty"`
+	Subset *InQuerySubset `form:"subset,omitempty" json:"subset,omitempty"`
+	Tag    *InQueryTag    `form:"tag,omitempty" json:"tag,omitempty"`
+
+	// ConfigUpdatedAt Refuse the action unless the instance configuration on the node running
+	// it is at least as recent as this timestamp, answering 409 Conflict when
+	// it is older.
+	//
+	// A configuration write answers with the timestamp it produced, in the
+	// OM-Last-Modified header, and a write reaches the peer nodes a moment
+	// after it is acknowledged. Passing that timestamp back here is how a
+	// client that wrote a configuration and then acts on it makes sure every
+	// instance acts on what it wrote, rather than on what it is replacing.
+	//
+	// Optional. Without it the action runs on whatever configuration the node
+	// holds.
+	ConfigUpdatedAt *ConfigUpdatedAt `form:"config_updated_at,omitempty" json:"config_updated_at,omitempty"`
+	Force           *InQueryForce    `form:"force,omitempty" json:"force,omitempty"`
 }
 
 // PostInstanceActionFreezeParams defines parameters for PostInstanceActionFreeze.
@@ -6313,7 +6344,17 @@ type PostObjectConfigFileParams struct {
 	// provision. Needs the admin grant of the namespace of the object the
 	// snapshot is of.
 	Snapshot *InQueryCreateSnapshot `form:"snapshot,omitempty" json:"snapshot,omitempty"`
-	Force    *InQueryForce          `form:"force,omitempty" json:"force,omitempty"`
+
+	// Replica Create the object as a replica of the object the snapshot is of, an
+	// object of another cluster: the daemon sets its replica_of keyword,
+	// naming the store, the cluster and the object it follows, and its
+	// replica_grants keyword, the grants of the requester, which the
+	// configurations it follows are judged under. Its instances are the
+	// drpnodes of the configuration, the daemon does not start it on its
+	// own, and its sync.store resource follows the snapshots of its source
+	// on its schedule. Needs store and snapshot.
+	Replica *InQueryCreateReplica `form:"replica,omitempty" json:"replica,omitempty"`
+	Force   *InQueryForce         `form:"force,omitempty" json:"force,omitempty"`
 
 	// DryRun Run every check of the write, the rbac policy, the validation, the
 	// claims and the holds, and write nothing. The answer is a 200 with the
@@ -6349,6 +6390,15 @@ type PutObjectConfigFileParams struct {
 	// configuration, the caller not allowed to write the object, or a
 	// configuration that does not parse, is refused as the write.
 	DryRun *InQueryConfigDryRun `form:"dry_run,omitempty" json:"dry_run,omitempty"`
+
+	// Follow The configuration is one a replica follows, saved by the object it
+	// is a replica of: the daemon keeps what the replica recorded of its
+	// own, its id and its replica_of, replica_grants and restore_from
+	// keywords, and judges the write under the grants replica_grants
+	// recorded when the replica was created, not under the ones of the
+	// requester, which must be root: the follow action of the replica
+	// asks it. Refused for an object that is not a replica.
+	Follow *InQueryConfigFollow `form:"follow,omitempty" json:"follow,omitempty"`
 }
 
 // GetObjectConfigKeywordsParams defines parameters for GetObjectConfigKeywords.

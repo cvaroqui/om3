@@ -42,6 +42,18 @@ func (a *DaemonAPI) PutObjectConfigFile(ctx echo.Context, namespace string, kind
 
 	force := params.Force != nil && *params.Force
 
+	// A configuration a replica follows is judged under the grants
+	// recorded when the replica was created, as a write of its creator.
+	if params.Follow != nil && *params.Follow {
+		var status int
+		if body, status, err = followedConfig(ctx, p, body); err != nil {
+			return JSONProblemf(ctx, status, http.StatusText(status), "%s", err)
+		}
+		// Nothing a follow writes is forced: the creator of the replica
+		// is not there to say so.
+		force = false
+	}
+
 	// A dry run runs every check, and answers what they found. A
 	// configuration that does not parse is not one to check.
 	dryRun := params.DryRun != nil && *params.DryRun

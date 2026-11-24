@@ -2380,7 +2380,7 @@ func newCmdObjectCreate(kind string) *cobra.Command {
 	commoncmd.FlagCreateRestore(flags, &options.Restore)
 	commoncmd.FlagKeywords(flags, &options.Keywords)
 	commoncmd.FlagProvision(flags, &options.Provision)
-	commoncmd.FlagsCreateFromStore(flags, &options.Store, &options.Snapshot)
+	commoncmd.FlagsCreateFromStore(flags, &options.Store, &options.Snapshot, &options.Replica)
 	flags.BoolVar(&options.WaitLocal, "wait-local", false, "wait for the local daemon to know the object, listed and watched by an instance monitor, for the command run next to find it")
 	commoncmd.FlagAdopt(flags, &options.Adopt)
 	commoncmd.FlagConfigDryRun(flags, &options.DryRun)
@@ -2435,7 +2435,7 @@ func newCmdObjectDeploy(kind string) *cobra.Command {
 	commoncmd.FlagCreateNamespace(flags, &options.Namespace)
 	commoncmd.FlagCreateRestore(flags, &options.Restore)
 	commoncmd.FlagKeywords(flags, &options.Keywords)
-	commoncmd.FlagsCreateFromStore(flags, &options.Store, &options.Snapshot)
+	commoncmd.FlagsCreateFromStore(flags, &options.Store, &options.Snapshot, &options.Replica)
 	commoncmd.FlagAdopt(flags, &options.Adopt)
 	return cmd
 }
@@ -2997,6 +2997,7 @@ func newCmdObjectGroupUpdate(kind, group string) *cobra.Command {
 func newCmdObjectSync(kind string) *cobra.Command {
 	cmd := commoncmd.NewCmdObjectSync(kind)
 	cmd.AddCommand(
+		newCmdObjectSyncFollow(kind),
 		newCmdObjectGroupFull(kind, "sync"),
 		newCmdObjectGroupIngest(kind, "sync"),
 		newCmdObjectGroupList(kind, "sync"),
@@ -3007,6 +3008,71 @@ func newCmdObjectSync(kind string) *cobra.Command {
 		newCmdObjectGroupSplit(kind, "sync"),
 		newCmdObjectGroupUpdate(kind, "sync"),
 	)
+	return cmd
+}
+
+func newCmdObjectSyncFollow(kind string) *cobra.Command {
+	var options commands.CmdObjectInstanceFollow
+	cmd := &cobra.Command{
+		Use:   "follow [PATTERN]...",
+		Short: "bring a replica to the latest snapshot of its source",
+		Long: `Bring a replica to the latest snapshot of the object it is a replica of.
+
+The sync.store resource of a replica, an object created with "deploy --store
+--snapshot --replica", follows the snapshots its source writes into the
+store: the configuration the latest saved is applied, judged under the
+grants recorded when the replica was created, then its heads are restored,
+staged when their storage stages them, the instance left stopped. The
+replica says what it holds to its source, in the store. The schedule of
+the resource runs it.
+
+A replica holding the latest snapshot already has nothing to follow. An
+object that is not a replica is refused.`,
+		GroupID: commoncmd.GroupIDReplication,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			commoncmd.SetRIDFromArgs(&options.RID, args, "sync", "sync")
+			return options.Run(kind)
+		},
+	}
+	commoncmd.CmdWithArg(cmd, "PATTERN  A fnmatch sync resource index filter.")
+	flags := cmd.Flags()
+	addFlagsGlobal(flags, &options.OptsGlobal)
+	commoncmd.FlagsAsync(flags, &options.OptsAsync)
+	commoncmd.FlagsLock(flags, &options.OptsLock)
+	hiddenFlagLocal(flags, &options.Local)
+	commoncmd.FlagNodeSelector(flags, &options.NodeSelector)
+	return cmd
+}
+
+func newCmdObjectInstanceFollow(kind string) *cobra.Command {
+	var options commands.CmdObjectInstanceFollow
+	cmd := &cobra.Command{
+		Use:   "follow",
+		Short: "bring a replica instance to the latest snapshot of its source",
+		Long: `Bring a replica to the latest snapshot of the object it is a replica of.
+
+The sync.store resource of a replica, an object created with "deploy --store
+--snapshot --replica", follows the snapshots its source writes into the
+store: the configuration the latest saved is applied, judged under the
+grants recorded when the replica was created, then its heads are restored,
+staged when their storage stages them, the instance left stopped. The
+replica says what it holds to its source, in the store. The schedule of
+the resource runs it.
+
+A replica holding the latest snapshot already has nothing to follow. An
+object that is not a replica is refused.`,
+		GroupID: commoncmd.GroupIDReplication,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return options.Run(kind)
+		},
+	}
+	flags := cmd.Flags()
+	addFlagsGlobal(flags, &options.OptsGlobal)
+	commoncmd.FlagsAsync(flags, &options.OptsAsync)
+	commoncmd.FlagsLock(flags, &options.OptsLock)
+	commoncmd.FlagsResourceSelector(cmd, &options.OptsResourceSelector)
+	hiddenFlagLocal(flags, &options.Local)
+	commoncmd.FlagNodeSelector(flags, &options.NodeSelector)
 	return cmd
 }
 

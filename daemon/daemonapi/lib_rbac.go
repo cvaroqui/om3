@@ -752,13 +752,13 @@ func keyChangedOn(from, to *xconfig.T, k key.T, scopes []string) (string, bool) 
 // runs on before the write and after it, and this one, which answers for a
 // configuration that names no node.
 func rbacScopes(cfgs ...*xconfig.T) []string {
-	k := key.New("DEFAULT", "nodes")
 	set := map[string]bool{hostname.Hostname(): true}
 	for _, cfg := range cfgs {
 		if cfg == nil {
 			continue
 		}
-		for _, nodename := range cfg.GetStrings(k) {
+		// A replica runs on its drpnodes.
+		for _, nodename := range cfg.GetStrings(object.ScopeKey(cfg)) {
 			set[nodename] = true
 		}
 	}

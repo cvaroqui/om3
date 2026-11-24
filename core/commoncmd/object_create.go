@@ -76,11 +76,15 @@ func CreateObjectConfig(ctx context.Context, c *client.T, p naming.Path, b []byt
 // the store, through the api: the daemon reads the configuration of the
 // object the snapshot is of, creates the keys of the sec and cfg it
 // references that the namespace of p lacks, and names the snapshot the
-// provision restores the heads from.
-func CreateObjectConfigFromStore(ctx context.Context, c *client.T, p naming.Path, store, snapshot string, keywords []string, restore, force bool, wait time.Duration, dryRun *DryRun) error {
+// provision restores the heads from. With replica, the daemon makes the
+// object a replica of the one the snapshot is of, following its snapshots.
+func CreateObjectConfigFromStore(ctx context.Context, c *client.T, p naming.Path, store, snapshot string, replica bool, keywords []string, restore, force bool, wait time.Duration, dryRun *DryRun) error {
 	params := createParams(keywords, restore, wait, dryRun != nil)
 	params.Store = &store
 	params.Snapshot = &snapshot
+	if replica {
+		params.Replica = &replica
+	}
 	return postObjectConfig(ctx, c, p, nil, params, force, restore, dryRun)
 }
 

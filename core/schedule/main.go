@@ -29,6 +29,11 @@ type (
 		// data is replicated from only.
 		RequireReplicationSource bool `json:"require_replication_source,omitempty"`
 
+		// RequireLeader schedules the action on the placement leader
+		// of the object only, the node its instance monitor says is:
+		// the other nodes skip the run, quietly.
+		RequireLeader bool `json:"require_leader,omitempty"`
+
 		// StatefileKey is used in the last run filename and last run success formatters.
 		// Defaults to Action if empty.
 		StatefileKey string `json:"-"`
@@ -71,6 +76,7 @@ func (c Config) Equal(other Config) bool {
 		c.RequireProvisioned == other.RequireProvisioned &&
 		c.RunDir == other.RunDir &&
 		c.RequireReplicationSource == other.RequireReplicationSource &&
+		c.RequireLeader == other.RequireLeader &&
 		c.StatefileKey == other.StatefileKey &&
 		slices.Equal(c.On, other.On) &&
 		c.Pace == other.Pace &&

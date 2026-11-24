@@ -680,6 +680,26 @@ var rules = map[string]Group{
 				Reason:   reasonRoot,
 				MayUnset: true,
 			},
+			// A replica follows the configurations another cluster
+			// saves, with no requester to judge them by: the daemon sets
+			// the source it follows, and the grants each configuration
+			// followed is judged under, on a create from a store asking
+			// for a replica, once it checked the requester is an
+			// administrator of the namespace. Written by anyone else, the
+			// first would have the object take the configurations of an
+			// object its author may not read, and the second would have
+			// them judged under grants its author does not hold. Unset,
+			// the object is no longer a replica: the daemon would start
+			// it, beside its source, so taking them away is root's too,
+			// until a promotion does it knowing the source lost.
+			"replica_of": {
+				Grant:  rbac.GrantRoot,
+				Reason: reasonRoot,
+			},
+			"replica_grants": {
+				Grant:  rbac.GrantRoot,
+				Reason: reasonRoot,
+			},
 		}},
 
 	// A claim says how much of a pool, or how many addresses of a network,

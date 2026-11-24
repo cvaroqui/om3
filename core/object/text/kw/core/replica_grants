@@ -1,0 +1,11 @@
+The grants the configurations a replica follows are judged under: the ones
+of the requester who created the replica, as the daemon recorded them then.
+
+A replica applies the configurations its source saves with no requester
+asking for them. Each is judged as a configuration that requester would
+write: a keyword change these grants do not allow is refused, the
+configuration is not applied, and the replica says so to its source.
+
+`deploy --store <store> --snapshot <id> --replica` sets it, with
+`replica_of`. The daemon writes it, and nobody but root changes or unsets
+it.

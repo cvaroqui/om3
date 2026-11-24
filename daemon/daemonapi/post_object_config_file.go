@@ -1,6 +1,7 @@
 package daemonapi
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,12 +69,16 @@ func (a *DaemonAPI) PostObjectConfigFile(ctx echo.Context, namespace string, kin
 		sets = keyop.ParseOps(*params.Set)
 	}
 	var src *storeSource
+	replica := params.Replica != nil && *params.Replica
+	if replica && (params.Store == nil || params.Snapshot == nil) {
+		return JSONProblemf(ctx, http.StatusBadRequest, "Bad request", "a replica is created from a snapshot of the object it follows: it needs the store and the snapshot")
+	}
 	if params.Store != nil || params.Snapshot != nil {
 		if len(body) > 0 {
 			return JSONProblemf(ctx, http.StatusBadRequest, "Bad request", "a create from a store takes the configuration of the snapshot, and no body")
 		}
 		var status int
-		if src, status, err = openStoreSource(ctx, p, params.Store, params.Snapshot); err != nil {
+		if src, status, err = openStoreSource(ctx, p, params.Store, params.Snapshot, replica); err != nil {
 			return JSONProblemf(ctx, status, http.StatusText(status), "%s", err)
 		}
 		defer src.close()
@@ -112,7 +117,9 @@ func (a *DaemonAPI) PostObjectConfigFile(ctx echo.Context, namespace string, kin
 	// read, and writes no key. A dry run the keyword policy refused judges
 	// the configuration without them.
 	if src != nil && !check.refused() {
-		if oc, body, base, err = src.apply(ctx, p, body, base); err != nil {
+		if oc, body, base, err = src.apply(ctx, p, body, base); errors.Is(err, errBadReplica) {
+			return JSONProblemf(ctx, http.StatusBadRequest, "Create from store", "%s", err)
+		} else if err != nil {
 			return JSONProblemf(ctx, http.StatusInternalServerError, "Create from store", "%s", err)
 		}
 	}

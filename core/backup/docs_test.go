@@ -85,7 +85,7 @@ func TestWriteAndReadReceipts(t *testing.T) {
 	// A former receipt that can not be read is replaced.
 	docs["prod/oid/receipt.drp"] = []byte("{")
 	require.NoError(t, WriteReceipt(ctx, docs, "prod", "oid", Receipt{ReplicaClusterID: "drp", RunID: "run3"}))
-	b, err = docs.GetDoc(ctx, "prod", "oid", ReceiptName("drp"))
+	b, err = docs.GetDoc(ctx, "prod", "oid", Receipt{ReplicaClusterID: "drp"}.DocName())
 	require.NoError(t, err)
 	var r Receipt
 	require.NoError(t, json.Unmarshal(b, &r))

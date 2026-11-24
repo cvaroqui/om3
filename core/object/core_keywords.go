@@ -1059,6 +1059,23 @@ var keywordStore = keywords.Store{
 		Text:    keywords.NewText(fs, "text/kw/core/restore_from"),
 	},
 	{
+		Example: "store1 3e1b2a54-5c1f-4f0e-9f0a-6d2f4c1b7a90 7c0e41d2-9a1b-4c3d-8e5f-0a1b2c3d4e5f",
+		Kind:    naming.NewKinds(naming.KindSvc, naming.KindVol),
+		Option:  "replica_of",
+		Group:   objectGroupDeployment.ID,
+		Section: "DEFAULT",
+		Text:    keywords.NewText(fs, "text/kw/core/replica_of"),
+	},
+	{
+		Converter: converters.List,
+		Example:   "admin:ns1",
+		Kind:      naming.NewKinds(naming.KindSvc, naming.KindVol),
+		Option:    "replica_grants",
+		Group:     objectGroupDeployment.ID,
+		Section:   "DEFAULT",
+		Text:      keywords.NewText(fs, "text/kw/core/replica_grants"),
+	},
+	{
 		Attr:      "Unprovision",
 		Converter: converters.Bool,
 		Default:   "true",

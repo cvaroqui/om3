@@ -367,6 +367,12 @@ type (
 		Cluster   string `json:"cluster"`
 		ClusterID string `json:"cluster_id"`
 
+		// Node is the node of that cluster holding the copy judged,
+		// when the cluster keeps one per node, as the instances of a
+		// flex replica, each judged apart. Empty for the copy of the
+		// cluster.
+		Node string `json:"node,omitempty"`
+
 		// RunID is the run the replica restored last, and SeenRunID
 		// the latest run it listed then.
 		RunID     string `json:"run_id"`
@@ -440,6 +446,10 @@ type (
 		// data of the object is replicated from only, the one
 		// instance.Status.ReplicationSource says is.
 		RequireReplicationSource bool
+
+		// RequireLeader schedules the action on the placement leader of
+		// the object only, as schedule.Config.RequireLeader.
+		RequireLeader bool
 
 		// Log asks the scheduled runs logged, as schedule.Config.Log.
 		Log bool
@@ -1322,6 +1332,22 @@ func Restore(ctx context.Context, r Driver) error {
 	}
 	Setenv(r)
 	return s.Restore(ctx)
+}
+
+// Follow executes the resource Follow function, if implemented by the
+// driver: the heads of a replica brought to the latest run of its source.
+func Follow(ctx context.Context, r Driver) error {
+	var i any = r
+	s, ok := i.(Follower)
+	if !ok {
+		return ErrActionNotSupported
+	}
+	defer EvalStatus(ctx, r)
+	if r.IsDisabled() || r.IsActionDisabled() {
+		return ErrDisabled
+	}
+	Setenv(r)
+	return s.Follow(ctx)
 }
 
 // Ingest execute the resource Ingest function, if implemented by the driver.

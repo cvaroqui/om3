@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -25,7 +26,18 @@ type storeSource struct {
 	store  backup.Driver
 	run    backup.Run
 	config []byte
+
+	// replica is what the object created is a replica of, the object
+	// the snapshot is of, when the create asks for a replica, and
+	// grants the ones of the requester, which the configurations the
+	// replica follows are judged under.
+	replica *backup.ReplicaSource
+	grants  []string
 }
+
+// errBadReplica is the refusal of a create asking for a replica that can
+// not be one.
+var errBadReplica = errors.New("not a replica")
 
 var keyRestoreFrom = key.Parse("restore_from")
 
@@ -33,7 +45,12 @@ var keyRestoreFrom = key.Parse("restore_from")
 // object p, which may be of an object of another namespace: the requester is
 // an administrator of the namespace of that one, which may be read out of
 // the snapshot.
-func openStoreSource(ctx echo.Context, p naming.Path, store *api.InQueryStore, snapshot *api.InQueryCreateSnapshot) (*storeSource, int, error) {
+//
+// With replica, the object is created as a replica of the object the
+// snapshot is of, which is one of another cluster: the same admin grant
+// that lets the requester create an object from the snapshot lets it follow
+// the ones that come after.
+func openStoreSource(ctx echo.Context, p naming.Path, store *api.InQueryStore, snapshot *api.InQueryCreateSnapshot, replica bool) (*storeSource, int, error) {
 	switch {
 	case store == nil || *store == "":
 		return nil, http.StatusBadRequest, fmt.Errorf("a snapshot needs the store holding it")
@@ -69,6 +86,18 @@ func openStoreSource(ctx echo.Context, p naming.Path, store *api.InQueryStore, s
 		src.close()
 		return nil, http.StatusForbidden, fmt.Errorf("snapshot %s is of %s on the cluster %s: creating an object from it needs the admin grant of its namespace on this cluster, or root", src.run.ShortID(), src.run.Path, src.run.ClusterName)
 	}
+	if replica {
+		switch {
+		case src.run.ClusterID == "" || src.run.ObjectID == "":
+			src.close()
+			return nil, http.StatusBadRequest, fmt.Errorf("snapshot %s does not say the cluster and the object it is of, which a replica follows", src.run.ShortID())
+		case src.run.ClusterID == clusterID:
+			src.close()
+			return nil, http.StatusBadRequest, fmt.Errorf("snapshot %s is of %s on this cluster: a replica is of an object of another cluster", src.run.ShortID(), src.run.Path)
+		}
+		src.replica = &backup.ReplicaSource{Store: s.Ref(), ClusterID: src.run.ClusterID, ObjectID: src.run.ObjectID}
+		src.grants = grantsFromContext(ctx).AsStringList()
+	}
 	b, err := backup.ReadMember(reqCtx, s, src.run, backup.MemberConfig)
 	if err != nil {
 		src.close()
@@ -90,8 +119,12 @@ func withoutRestoreFrom(p naming.Path, b []byte) ([]byte, error) {
 		return nil, err
 	}
 	cfg := oc.Config()
-	if err := cfg.PrepareUnset(keyRestoreFrom); err != nil {
-		return nil, err
+	// Nor what the daemon of its cluster set on it otherwise: the copy
+	// of a replica is a replica when its create asks for one.
+	for _, option := range backup.DaemonSetOptions {
+		if err := cfg.PrepareUnset(key.New("DEFAULT", option)); err != nil {
+			return nil, err
+		}
 	}
 	return cfg.Dump()
 }
@@ -136,8 +169,27 @@ func (t *storeSource) apply(ctx echo.Context, p naming.Path, body []byte, base c
 	}
 	value := fmt.Sprintf("%s %s %s", t.store.Ref(), t.run.Path, t.run.ID)
 	log.Infof("%s: the configuration of %s from snapshot %s in store %s, its heads restored at provision", p, t.run.Path, t.run.ShortID(), t.store.Ref())
-	oc, body, err := object.CreatedConfig(p, body, true, *keyop.New(keyRestoreFrom, keyop.Set, value, 0))
-	return oc, body, base, err
+	sets := []keyop.T{*keyop.New(keyRestoreFrom, keyop.Set, value, 0)}
+	if t.replica != nil {
+		log.Infof("%s: a replica of the object %s of the cluster %s, following its snapshots in store %s under the grants %s", p, t.replica.ObjectID, t.run.ClusterName, t.replica.Store, strings.Join(t.grants, " "))
+		sets = append(sets,
+			*keyop.New(object.KeyReplicaOf, keyop.Set, t.replica.String(), 0),
+			*keyop.New(object.KeyReplicaGrants, keyop.Set, strings.Join(t.grants, " "), 0),
+		)
+	}
+	oc, body, err := object.CreatedConfig(p, body, true, sets...)
+	if err != nil {
+		return oc, body, base, err
+	}
+	if t.replica != nil {
+		// The instances of a replica are its drpnodes: a configuration
+		// whose drpnodes do not name this node would be one this node
+		// has no instance of, and the daemon would drop it.
+		if err := replicaHostedHere(p, body); err != nil {
+			return oc, body, base, fmt.Errorf("%w: %w: name the nodes of this cluster in the drpnodes of the source, or set them with the create", errBadReplica, err)
+		}
+	}
+	return oc, body, base, nil
 }
 
 func (t *storeSource) readRefs(ctx context.Context) (object.RefsDocument, error) {

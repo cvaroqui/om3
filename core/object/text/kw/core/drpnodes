@@ -14,3 +14,9 @@ example `n1 n[23] n4*` would be expanded to `n1 n2 n3 n4` in a
 `n1 n2 n3 n4 n5` cluster.
 
 The drpnodes can be data synchronization targets for `sync` resources.
+
+The drpnodes also name the nodes of another cluster hosting a replica of
+the object, created there with `deploy --store --snapshot --replica`. Not
+nodes of the cluster the object runs on, they evaluate to none there. On
+the cluster of the replica, they are the nodes hosting its instances, and a
+keyword scoped `@drpnodes` holds the value the replica reads.

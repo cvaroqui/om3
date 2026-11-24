@@ -114,12 +114,43 @@ func New() resource.Driver {
 	return &T{}
 }
 
-// Label returns the store the runs go to.
+// Label returns the store the runs go to, or come from on a replica.
 func (t *T) Label(_ context.Context) string {
+	if t.isReplica() {
+		return "from " + t.Store
+	}
 	return "to " + t.Store
 }
 
+// ScheduleOptions returns the action the schedule keyword runs: the update
+// writing a run, on the node the object runs on, or the follow of the latest
+// run of its source, on a replica. The same keyword drives both, the
+// configuration of a replica being the one of its source: a replica follows
+// as often as its source saves.
 func (t *T) ScheduleOptions() resource.ScheduleOptions {
+	return t.scheduleOptions(t.isReplica(), t.receiptPerNode())
+}
+
+func (t *T) scheduleOptions(replica, flex bool) resource.ScheduleOptions {
+	if replica {
+		// The requirements of an update are the ones of the instance
+		// writing the run, up: a replica is stopped, and follows once
+		// provisioned, its heads made.
+		//
+		// The nodes of a failover replica hold one copy, heads they
+		// share or heads one of them is to start on: its placement
+		// leader follows, the node a promotion would start it on. The
+		// instances of a flex replica each hold a copy, which each
+		// node follows.
+		return resource.ScheduleOptions{
+			Action:             "sync_follow",
+			Option:             "schedule",
+			Base:               "",
+			RequireProvisioned: true,
+			RequireLeader:      !flex,
+			Log:                t.LogRuns,
+		}
+	}
 	return resource.ScheduleOptions{
 		Action:                   "update",
 		Option:                   "schedule",
@@ -520,6 +551,13 @@ func (t *T) update(ctx context.Context) (backup.Run, error) {
 		return run, err
 	}
 	run.Protected, run.Note = marks.Protect, marks.Note
+	if t.isReplica() {
+		// The heads of a replica are up, to follow into: they hold the
+		// data of its source, which a run of its own would save as the
+		// replica's.
+		t.Log().Infof("a replica follows the runs of its source: no run from it")
+		return run, errPassive
+	}
 	if v, reason := t.IsInstanceSufficientlyStarted(ctx); !v {
 		t.Log().Infof("the instance is not sufficiently started (%s): no run from this node", reason)
 		return run, errPassive
@@ -875,8 +913,17 @@ func shortIDs(runs []backup.Run) string {
 // Status judges the freshness of the last run written whole from this node,
 // on the node holding the active instance, and the replicas other clusters
 // keep by restoring the runs, from the receipts they write into the store.
+//
+// On a replica, it judges the run of its source the heads hold instead, from
+// the record of its follows.
 func (t *T) Status(ctx context.Context) status.T {
 	t.replicas = nil
+	if src, ok, err := t.replicaSource(); err != nil {
+		t.StatusLog().Error("%s", err)
+		return status.Warn
+	} else if ok {
+		return t.statusFollow(ctx, src)
+	}
 	if v, reason := t.IsInstanceSufficientlyStarted(ctx); !v {
 		t.StatusLog().Info("no run from this node: %s", reason)
 		return status.NotApplicable
@@ -1031,20 +1078,7 @@ func (t *T) configDrift(ctx context.Context, s backup.Store, run backup.Run) ([]
 	if err != nil {
 		return nil, nil, err
 	}
-	a, b := backup.ConfigKeys(saved), backup.ConfigKeys(current)
-	l := make([]string, 0)
-	for k, v := range a {
-		if w, ok := b[k]; !ok || w != v {
-			l = append(l, k)
-		}
-	}
-	for k := range b {
-		if _, ok := a[k]; !ok {
-			l = append(l, k)
-		}
-	}
-	slices.Sort(l)
-	return l, saved, nil
+	return keysDrift(backup.ConfigKeys(saved), backup.ConfigKeys(current)), saved, nil
 }
 
 // sayConfigDrift says when the configuration of the object changed since the

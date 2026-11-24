@@ -521,6 +521,12 @@ func (t *T) admitJob(j *job, now time.Time) (admittedJob, bool) {
 	t.planJob(e, now)
 	t.updateExposedSchedules(e.Path)
 
+	if reason := t.notLeaderReason(e); reason != "" {
+		// Said at debug level: on every node but one, at every
+		// period, it is the job running as designed.
+		logger.Debugf("skip (%s)", reason)
+		return admittedJob{}, false
+	}
 	if reason := t.skipReason(e); reason != "" {
 		logger.Infof("skip (%s)", reason)
 		return admittedJob{}, false
@@ -680,6 +686,25 @@ func (t *T) holdReason(e schedule.Entry) string {
 		return ""
 	}
 	return fmt.Sprintf("instance %s", mon.State)
+}
+
+// notLeaderReason says why the job due now, one of the placement leader of
+// its object only, does not run on this node, "" when it runs: the follow of
+// a failover replica, whose heads one node holds, is the leader's. The
+// leadership is read when the job is due, and the job stays planned: the
+// node leading at the next period runs it.
+func (t *T) notLeaderReason(e schedule.Entry) string {
+	if e.Path.IsZero() || !e.RequireLeader {
+		return ""
+	}
+	mon := instance.MonitorData.GetByPathAndNode(e.Path, t.localhost)
+	switch {
+	case mon == nil:
+		return "placement leader not yet evaluated"
+	case !mon.IsLeader:
+		return "not the placement leader"
+	}
+	return ""
 }
 
 // skipReason says why the job due now does not run, "" when it runs.

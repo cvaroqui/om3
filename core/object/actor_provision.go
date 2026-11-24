@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/opensvc/om3/v3/core/actioncontext"
@@ -96,7 +97,11 @@ func (t *actor) Provision(ctx context.Context) (err error) {
 	// is left down for the leader to start, an instance found running is
 	// left running. The status read now tells which, and which resources
 	// were up already.
-	restore := !actioncontext.IsRollbackDisabled(ctx2) && !actioncontext.IsLeader(ctx2)
+	//
+	// A replica is left stopped by its leader too: its heads were started
+	// to restore the snapshot into, and a replica is stopped until its
+	// promotion.
+	restore := !actioncontext.IsRollbackDisabled(ctx2) && (!actioncontext.IsLeader(ctx2) || t.IsReplica())
 	var before instance.Status
 	if restore {
 		before, err = t.lockedStatusBeforeProvision(ctx)
@@ -181,6 +186,7 @@ func (t *actor) lockedProvision(ctx context.Context) error {
 	if src != nil {
 		defer src.store.Close()
 	}
+	replica := t.IsReplica()
 	err = t.action(ctx, func(ctx context.Context, r resource.Driver) error {
 		rid := r.RID()
 		t.log.Attr("rid", rid).Tracef("%s: provision resource", rid)
@@ -194,6 +200,13 @@ func (t *actor) lockedProvision(ctx context.Context) error {
 			}
 		}
 		t.resolveProvisionKeywords(r)
+		if replica && !slices.Contains(restoreHeadGroups, r.ID().DriverGroup()) {
+			// A replica is provisioned stopped: its heads are
+			// started, to restore the snapshot into, and nothing
+			// using their data is, nor an address its source may
+			// hold.
+			ctx = resource.WithProvisionStartDisabled(ctx)
+		}
 		if err := resource.Provision(ctx, r, leader); err != nil {
 			return err
 		}

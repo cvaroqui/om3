@@ -298,6 +298,32 @@ type (
 		RestoredConfig(context.Context) ([]byte, []string, error)
 	}
 
+	// Follower is a sync resource of a replica, following the runs the
+	// object it is a replica of writes.
+	//
+	// A follow is two steps, the configuration then the heads, because
+	// the first changes what the second acts on: the daemon replaces the
+	// configuration, taking the lock of the object, and the heads are
+	// restored by the resources of the configuration replaced, under that
+	// lock.
+	Follower interface {
+		// FollowConfig applies the configuration of the latest run of
+		// the source when the object does not hold it, and says
+		// whether it changed the configuration. A configuration
+		// refused is an error, said to the source, and the heads are
+		// not followed.
+		FollowConfig(context.Context) (bool, error)
+
+		// FollowPending says the latest run of the source is not the
+		// one the heads hold: Follow has heads to restore, which need
+		// the instance readied for it.
+		FollowPending(context.Context) (bool, error)
+
+		// Follow restores the heads from the latest run of the
+		// source, when they do not hold it.
+		Follow(context.Context) error
+	}
+
 	// SnapshotLister is a sync resource holding restorable points in
 	// time.
 	SnapshotLister interface {

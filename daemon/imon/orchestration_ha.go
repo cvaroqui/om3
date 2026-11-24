@@ -18,6 +18,13 @@ func (t *Manager) orchestrateNone() {
 	if t.objStatus.ActorStatus == nil {
 		return
 	}
+	if t.isReplica() {
+		// The daemon starts no replica on its own, whatever its
+		// orchestrate, which is the one of its source: a replica
+		// starts by its promotion, a decision of an operator knowing
+		// the source lost.
+		return
+	}
 	switch t.objStatus.Orchestrate {
 	case "ha":
 		t.orchestrateHAStart()
@@ -359,4 +366,29 @@ func (t *Manager) objectAvail() status.T {
 		return status.Undef
 	}
 	return t.objStatus.Avail
+}
+
+// isReplica says the instance is the one of a replica, an object following
+// an object of another cluster, as its configuration says: the daemon takes
+// no start initiative for it.
+func (t *Manager) isReplica() bool {
+	return t.instConfig.ActorConfig != nil && t.instConfig.ActorConfig.DRP
+}
+
+// replicaRefusal says why an orchestration starting the object is refused
+// upfront, empty when it is not: the object is a replica, whose instances
+// refuse to start unless forced. The orchestration would end on a start
+// failure saying the same.
+func (t *Manager) replicaRefusal(globalExpect instance.MonitorGlobalExpect) string {
+	if !t.isReplica() {
+		return ""
+	}
+	switch globalExpect {
+	case instance.MonitorGlobalExpectStarted,
+		instance.MonitorGlobalExpectRestarted,
+		instance.MonitorGlobalExpectPlaced,
+		instance.MonitorGlobalExpectPlacedAt:
+		return fmt.Sprintf("%s is a replica: a replica starts by its promotion, or by 'instance start --force' on the node to start it on", t.path)
+	}
+	return ""
 }

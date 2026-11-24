@@ -40,6 +40,10 @@ type (
 		Store    string
 		Snapshot string
 
+		// Replica creates the object as a replica of the object the
+		// snapshot is of, following its snapshots.
+		Replica bool
+
 		client *client.T
 		path   naming.Path
 	}
@@ -165,6 +169,9 @@ func (t *CmdObjectCreate) do() error {
 	if t.Store != "" || t.Snapshot != "" {
 		return t.fromStore()
 	}
+	if t.Replica {
+		return fmt.Errorf("--replica needs --store and --snapshot: a replica is created from a snapshot of the object it follows")
+	}
 	template := t.getTemplate()
 	paths := t.getSourcePaths()
 	pathsCount := len(paths)
@@ -216,7 +223,7 @@ func (t *CmdObjectCreate) fromStore() error {
 	case t.path.IsZero():
 		return fmt.Errorf("need a target object path")
 	}
-	return commoncmd.CreateObjectConfigFromStore(context.Background(), t.client, t.path, t.Store, t.Snapshot, t.Keywords, t.Restore, t.Force, t.createWait(), commoncmd.NewDryRun(t.DryRun, t.Output, t.Color))
+	return commoncmd.CreateObjectConfigFromStore(context.Background(), t.client, t.path, t.Store, t.Snapshot, t.Replica, t.Keywords, t.Restore, t.Force, t.createWait(), commoncmd.NewDryRun(t.DryRun, t.Output, t.Color))
 }
 
 func (t *CmdObjectCreate) fromPath(p naming.Path) error {

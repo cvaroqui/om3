@@ -253,6 +253,14 @@ var (
 		MustLock: true,
 		PG:       true,
 	}
+	// SyncFollow is the follow of a replica: the latest run of the
+	// object it is a replica of restored into its heads. It takes the
+	// lock a start and a restore take, which run on the same heads.
+	SyncFollow = Properties{
+		Name:     "sync_follow",
+		MustLock: true,
+		PG:       true,
+	}
 	SyncResync = Properties{
 		Name:     "sync_resync",
 		MustLock: true,

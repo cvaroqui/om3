@@ -594,7 +594,7 @@ func (t *core) Nodes() ([]string, error) {
 	if err != nil {
 		return []string{}, err
 	}
-	return l.([]string), nil
+	return t.withoutReplicaNodes(l.([]string)), nil
 }
 
 func (t *core) DRPNodes() ([]string, error) {

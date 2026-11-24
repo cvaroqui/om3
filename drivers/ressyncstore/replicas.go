@@ -13,6 +13,7 @@ import (
 	"github.com/opensvc/om3/v3/core/status"
 	"github.com/opensvc/om3/v3/core/xconfig"
 	"github.com/opensvc/om3/v3/util/hostname"
+	"github.com/opensvc/om3/v3/util/key"
 )
 
 // A cluster restoring the runs of an object of another cluster is a replica
@@ -89,9 +90,17 @@ func judgeReplicas(now time.Time, receipts []backup.Receipt, runs []backup.Run, 
 		if name == "" {
 			name = receipt.ReplicaClusterID
 		}
+		node := ""
+		if receipt.PerNode {
+			// The copy of a node, one of the several its cluster
+			// keeps, judged as a replica of its own.
+			node = receipt.Node
+			name += "/" + node
+		}
 		rs := resource.ReplicaStatus{
 			Cluster:      receipt.ReplicaClusterName,
 			ClusterID:    receipt.ReplicaClusterID,
+			Node:         node,
 			RunID:        receipt.RunID,
 			SeenRunID:    receipt.SeenRunID,
 			ConfigValid:  receipt.ConfigValid,
@@ -174,17 +183,38 @@ func judgeReplicas(now time.Time, receipts []backup.Receipt, runs []backup.Run, 
 // nothing otherwise. A replica never makes the resource down: the object is
 // available where it runs whatever becomes of its replicas.
 //
-// An object no cluster restores has no receipt, and nothing is said, as of
-// one whose store keeps no documents, which can hold no receipt: nothing
-// tells yet an object expecting a replica from one that has none. The runs
-// of the object are listed only when it has a receipt.
+// An object expecting a replica is one whose configuration names drpnodes:
+// with no receipt, it warns that no replica acknowledged a run, and says its
+// replica health is unknown when its store keeps no documents, which can
+// hold no receipt. An object naming none has no replica to expect: no
+// cluster restoring it, nothing is said. The runs of the object are listed
+// only when it has a receipt.
 func (t *T) statusReplicas(ctx context.Context, s backup.Store) status.T {
 	t.replicas = nil
+	clusterID, _ := t.cluster()
+	return t.statusReplicasOf(ctx, s, clusterID, t.expectsReplica())
+}
+
+// expectsReplica says the object expects a replica: its configuration names
+// drpnodes, the nodes of another cluster a replica of it runs on.
+func (t *T) expectsReplica() bool {
+	cfg := t.objectConfig()
+	if cfg == nil {
+		return false
+	}
+	return strings.TrimSpace(cfg.Get(key.New("DEFAULT", "drpnodes"))) != ""
+}
+
+// statusReplicasOf judges the replicas of the object, an object of the
+// cluster clusterID, expecting a replica or not.
+func (t *T) statusReplicasOf(ctx context.Context, s backup.Store, clusterID string, expected bool) status.T {
 	a, ok := s.(backup.Annotator)
 	if !ok {
+		if expected {
+			t.StatusLog().Info("replica health unknown: store %s keeps no receipt of the replicas", s.Ref())
+		}
 		return status.NotApplicable
 	}
-	clusterID, _ := t.cluster()
 	objectID := t.ObjectID.String()
 	if clusterID == "" {
 		return status.NotApplicable
@@ -196,6 +226,10 @@ func (t *T) statusReplicas(ctx context.Context, s backup.Store) status.T {
 		t.StatusLog().Warn("replica health unknown: %s", err)
 	}
 	if len(receipts) == 0 {
+		if expected && err == nil {
+			t.StatusLog().Warn("no replica acknowledged a run: the drpnodes of the object expect one, created with 'deploy --store %s --snapshot %s --replica' on their cluster", s.Ref(), t.Path)
+			return status.Warn
+		}
 		return status.NotApplicable
 	}
 	runs, err := s.Runs(ctx, backup.RunFilter{ObjectID: objectID, Cluster: clusterID})
@@ -260,10 +294,26 @@ func (t *T) acknowledge(ctx context.Context, s backup.Store, run backup.Run, tou
 		return
 	}
 	clusterID, clusterName := t.cluster()
-	t.acknowledgeAs(ctx, s, run, clusterID, clusterName, t.validateConfig, touched, restoreErr)
+	t.acknowledgeFrom(ctx, s, run, clusterID, clusterName, hostname.Hostname(), t.receiptPerNode(), t.validateConfig, touched, restoreErr)
+}
+
+// receiptPerNode says the receipts of the object are per node: a flex
+// replica, each instance of which holds a copy of its own and follows it.
+func (t *T) receiptPerNode() bool {
+	cfg := t.objectConfig()
+	if cfg == nil || !t.isReplica() {
+		return false
+	}
+	return cfg.GetString(key.New("DEFAULT", "topology")) == "flex"
 }
 
 func (t *T) acknowledgeAs(ctx context.Context, s backup.Store, run backup.Run, clusterID, clusterName string, validate func() (bool, []string), touched bool, restoreErr error) {
+	t.acknowledgeFrom(ctx, s, run, clusterID, clusterName, hostname.Hostname(), false, validate, touched, restoreErr)
+}
+
+// acknowledgeFrom writes the receipt of the node node of the cluster
+// clusterID, the one of the copy it holds when perNode.
+func (t *T) acknowledgeFrom(ctx context.Context, s backup.Store, run backup.Run, clusterID, clusterName, node string, perNode bool, validate func() (bool, []string), touched bool, restoreErr error) {
 	if restoreErr != nil && !touched {
 		return
 	}
@@ -273,7 +323,8 @@ func (t *T) acknowledgeAs(ctx context.Context, s backup.Store, run backup.Run, c
 	receipt := backup.Receipt{
 		ReplicaClusterID:   clusterID,
 		ReplicaClusterName: clusterName,
-		Node:               hostname.Hostname(),
+		Node:               node,
+		PerNode:            perNode,
 	}
 	if restoreErr != nil {
 		receipt.RestoreError = restoreErr.Error()

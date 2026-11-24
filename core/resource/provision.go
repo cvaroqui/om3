@@ -217,7 +217,20 @@ func provision(ctx context.Context, t Driver, leader bool) error {
 	return nil
 }
 
+type provisionStartDisabledKey struct{}
+
+// WithProvisionStartDisabled says the provision of the resource leaves it
+// stopped: made, and not started, as the resources of a replica using the
+// data of its heads, which a promotion starts.
+func WithProvisionStartDisabled(ctx context.Context) context.Context {
+	return context.WithValue(ctx, provisionStartDisabledKey{}, true)
+}
+
 func startLeader(ctx context.Context, t Driver, leader bool) error {
+	if v, _ := ctx.Value(provisionStartDisabledKey{}).(bool); v {
+		t.Log().Infof("leave stopped, the resource of a replica")
+		return nil
+	}
 	if !t.IsStandby() && !leader && t.IsShared() {
 		t.Log().Tracef("skip provision-start because resource is shared and neither standby nor leader")
 		return nil

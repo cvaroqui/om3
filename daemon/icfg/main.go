@@ -411,6 +411,7 @@ func (t *Manager) configFileCheck() error {
 	if actor, ok := any(t.configure).(object.Actor); ok {
 		cfg.ActorConfig = &instance.ActorConfig{
 			App:                 cf.GetString(keyApp),
+			DRP:                 isReplica(cf),
 			Children:            t.getChildren(cf),
 			Env:                 cf.GetString(keyEnv),
 			IsDisabled:          cf.GetBool(keyDisable),
@@ -473,21 +474,31 @@ func (t *Manager) configFileCheck() error {
 //
 // depending on object kind
 // Ccfg => cluster.nodes
+// a replica => eval DEFAULT.drpnodes
 // else => eval DEFAULT.nodes
 func (t *Manager) getScope(cf *xconfig.T) (scope []string, err error) {
 	switch t.path.Kind {
 	case naming.KindCcfg:
 		scope = clusternode.Get()
 	default:
+		// The instances of a replica are its drpnodes: its nodes are
+		// the ones of the cluster of its source, which run the object.
+		k := object.ScopeKey(cf)
 		var evalNodes interface{}
-		evalNodes, err = cf.Eval(keyNodes)
+		evalNodes, err = cf.Eval(k)
 		if err != nil {
-			t.log.Errorf("eval DEFAULT.nodes: %s", err)
+			t.log.Errorf("eval %s: %s", k, err)
 			return
 		}
 		scope = evalNodes.([]string)
 	}
 	return
+}
+
+// isReplica says the configuration is the one of a replica, an object
+// following an object of another cluster.
+func isReplica(cf *xconfig.T) bool {
+	return cf.Get(object.KeyReplicaOf) != ""
 }
 
 func (t *Manager) getMonitorAction(cf *xconfig.T) []instance.MonitorAction {
