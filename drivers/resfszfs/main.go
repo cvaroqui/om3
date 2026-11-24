@@ -106,6 +106,13 @@ func (t *T) Stop(ctx context.Context) error {
 	if _, err := t.resolveMountPoint(); err != nil {
 		return err
 	}
+	// The stage held for a transfer from another node is discarded: it
+	// is of the storage the stop frees.
+	if resource.HeadStageHeld(t.VarDir()) {
+		if err := t.RecoverHeadStage(ctx); err != nil {
+			return err
+		}
+	}
 	if v, err := t.isMounted(ctx); err != nil {
 		return err
 	} else if !v {

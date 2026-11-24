@@ -66,6 +66,10 @@ type (
 		// its name: the tests kill the stager there.
 		step func(string)
 
+		// killWriters ends the processes working in the directory of
+		// a stage held for a transfer, before it is discarded.
+		killWriters func(dir string) error
+
 		// unmounted says a commit of this stager unmounted the
 		// dataset, which a discard mounts back.
 		unmounted bool
@@ -310,6 +314,11 @@ func (t *headStager) stage(ctx context.Context, name string) (resource.HeadStage
 	if _, err := t.zfs(ctx, true, "mount", t.stageName()); err != nil {
 		return fail(err)
 	}
+	return t.handle(j), true, nil
+}
+
+// handle returns the stage whose journal is j.
+func (t *headStager) handle(j *resource.HeadStageJournal) resource.HeadStage {
 	return resource.HeadStage{
 		Dir:    t.stageDir(),
 		Seeded: true,
@@ -321,7 +330,28 @@ func (t *headStager) stage(ctx context.Context, name string) (resource.HeadStage
 			return t.finish(ctx, j)
 		},
 		Discard: func(ctx context.Context) error { return t.discard(ctx, j) },
-	}, true, nil
+		Hold: func(ctx context.Context) error {
+			j.Hold()
+			return t.record(ctx, j, t.stageName())
+		},
+	}
+}
+
+// resume returns the stage named name a former process left held, as the
+// datasets carry its journal.
+func (t *headStager) resume(ctx context.Context, name string) (resource.HeadStage, error) {
+	none := resource.HeadStage{}
+	if _, err := resource.ResumeHeadStageJournal(t.varDir, name); err != nil {
+		return none, err
+	}
+	j, err := t.journal(ctx)
+	if err != nil {
+		return none, err
+	}
+	if j == nil || j.Name != name {
+		return none, fmt.Errorf("%s: %w", name, resource.ErrHeadStageDiscarded)
+	}
+	return t.handle(j), nil
 }
 
 // seal journals the decision to commit, on the clone.
@@ -513,6 +543,12 @@ func (t *headStager) discard(ctx context.Context, j *resource.HeadStageJournal) 
 		if v, err := t.mounted(ctx, t.stageName()); err != nil {
 			return err
 		} else if v {
+			if j.Held && t.killWriters != nil {
+				// The receiver of a transfer keeps the stage busy.
+				if err := t.killWriters(t.stageDir()); err != nil {
+					return err
+				}
+			}
 			if _, err := t.zfs(ctx, true, "unmount", t.stageName()); err != nil {
 				return err
 			}
@@ -611,6 +647,9 @@ func (t *T) headStager() *headStager {
 			}
 			return string(b), nil
 		},
+		killWriters: func(dir string) error {
+			return resource.KillHeadStageWriters(dir, log)
+		},
 		liveMounted: t.isMounted,
 		mountLive: func(ctx context.Context) error {
 			legacy, err := t.isLegacy()
@@ -654,4 +693,9 @@ func (t *T) StageHead(ctx context.Context, name string) (resource.HeadStage, boo
 // RecoverHeadStage implements resource.HeadStager.
 func (t *T) RecoverHeadStage(ctx context.Context) error {
 	return t.headStager().recover(ctx)
+}
+
+// ResumeHeadStage implements resource.HeadStager.
+func (t *T) ResumeHeadStage(ctx context.Context, name string) (resource.HeadStage, error) {
+	return t.headStager().resume(ctx, name)
 }

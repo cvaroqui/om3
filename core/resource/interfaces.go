@@ -254,6 +254,12 @@ type (
 		// start of the resource and StageHead call it first. It returns
 		// ErrHeadStageBusy when the process staging is still running.
 		RecoverHeadStage(ctx context.Context) error
+
+		// ResumeHeadStage returns the stage named name a former
+		// process opened and left held, for this one to commit or
+		// discard it, and ErrHeadStageDiscarded when a recovery
+		// discarded it since.
+		ResumeHeadStage(ctx context.Context, name string) (HeadStage, error)
 	}
 
 	// HeadStage is a generation of a head being written, apart from the
@@ -286,6 +292,12 @@ type (
 		// Discard drops the stage, the live head left as it is. It
 		// fails once the commit switched the head.
 		Discard func(context.Context) error
+
+		// Hold leaves the stage open past the process that opened it,
+		// for the session it is named after to resume it: a transfer
+		// from another node is written into it meanwhile, under no
+		// lock, and a start of the head discards it.
+		Hold func(context.Context) error
 	}
 
 	// ConfigRestorer is a sync resource holding the configuration of the

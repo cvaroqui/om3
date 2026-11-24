@@ -269,6 +269,23 @@ var (
 		MustLock: true,
 		PG:       true,
 	}
+	// SyncStage, SyncCommit and SyncDiscard open, commit and discard the
+	// stage a transfer from another node is written into, on the node
+	// receiving it. They take the lock a start takes, for the time of
+	// the step, not of the transfer: a start meanwhile discards the
+	// stage, and the commit is told so.
+	SyncStage = Properties{
+		Name:     "sync_stage",
+		MustLock: true,
+	}
+	SyncCommit = Properties{
+		Name:     "sync_commit",
+		MustLock: true,
+	}
+	SyncDiscard = Properties{
+		Name:     "sync_discard",
+		MustLock: true,
+	}
 	SyncResync = Properties{
 		Name:     "sync_resync",
 		MustLock: true,

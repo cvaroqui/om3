@@ -5646,6 +5646,138 @@ paths:
         - node / instance / vol
       x-internal: true
 
+  /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/resource/{rid}/head/commit:
+    post:
+      description: |
+        End the transfer `name` into the destination of the sync resource
+        `rid` of the instance, written whole: the head is switched to the
+        stage the transfer was written into, or the mark of a destination
+        written in place is cleared. Answers 409 when the stage was discarded
+        since it was opened, as by a start of the instance: the transfer is
+        to do again. The node sending the transfer asks it. Needs the root
+        grant.
+      operationId: PostInstanceResourceHeadCommit
+      parameters:
+        - $ref: '#/components/parameters/inPathNodeName'
+        - $ref: '#/components/parameters/inPathNamespace'
+        - $ref: '#/components/parameters/inPathKind'
+        - $ref: '#/components/parameters/inPathName'
+        - $ref: '#/components/parameters/inPathRid'
+        - $ref: '#/components/parameters/inQueryHeadStageName'
+      responses:
+        204:
+          $ref: '#/components/responses/204'
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+        403:
+          $ref: '#/components/responses/403'
+        404:
+          $ref: '#/components/responses/404'
+        409:
+          $ref: '#/components/responses/409'
+        500:
+          $ref: '#/components/responses/500'
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      tags:
+        - node / instance / svc
+        - node / instance / vol
+
+  /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/resource/{rid}/head/discard:
+    post:
+      description: |
+        End the transfer `name` into the destination of the sync resource
+        `rid` of the instance, failed or cancelled: its stage is dropped,
+        the head left as last committed. A destination written in place
+        stays marked incomplete. The node sending the transfer asks it.
+        Needs the root grant.
+      operationId: PostInstanceResourceHeadDiscard
+      parameters:
+        - $ref: '#/components/parameters/inPathNodeName'
+        - $ref: '#/components/parameters/inPathNamespace'
+        - $ref: '#/components/parameters/inPathKind'
+        - $ref: '#/components/parameters/inPathName'
+        - $ref: '#/components/parameters/inPathRid'
+        - $ref: '#/components/parameters/inQueryHeadStageName'
+      responses:
+        204:
+          $ref: '#/components/responses/204'
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+        403:
+          $ref: '#/components/responses/403'
+        404:
+          $ref: '#/components/responses/404'
+        409:
+          $ref: '#/components/responses/409'
+        500:
+          $ref: '#/components/responses/500'
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      tags:
+        - node / instance / svc
+        - node / instance / vol
+
+  /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/resource/{rid}/head/stage:
+    post:
+      description: |
+        Open the stage the transfer `name` is written into, for the sync
+        resource `rid` of the instance: a generation of the head holding its
+        destination apart from the live one, where its storage makes one,
+        which the commit switches to. A head with no stage is written in
+        place, and marked incomplete until the commit, which a start refuses
+        to run on. The stage is held under no lock: a start of the instance
+        discards it. The node sending the transfer asks it, before it sends.
+        Needs the root grant.
+      operationId: PostInstanceResourceHeadStage
+      parameters:
+        - $ref: '#/components/parameters/inPathNodeName'
+        - $ref: '#/components/parameters/inPathNamespace'
+        - $ref: '#/components/parameters/inPathKind'
+        - $ref: '#/components/parameters/inPathName'
+        - $ref: '#/components/parameters/inPathRid'
+        - $ref: '#/components/parameters/inQueryHeadStageName'
+        - in: query
+          name: seeded
+          description: |
+            Open no stage but one holding the destination as committed: the
+            transfer leaves a part of the destination as it is, as one
+            excluding files does, which a stage that is an empty tree would
+            not hold once switched to.
+          schema:
+            type: boolean
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceHeadStage'
+          description: OK
+        400:
+          $ref: '#/components/responses/400'
+        401:
+          $ref: '#/components/responses/401'
+        403:
+          $ref: '#/components/responses/403'
+        404:
+          $ref: '#/components/responses/404'
+        409:
+          $ref: '#/components/responses/409'
+        500:
+          $ref: '#/components/responses/500'
+      security:
+        - basicAuth: []
+        - bearerAuth: []
+      tags:
+        - node / instance / svc
+        - node / instance / vol
+
   /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/resource/info:
     get:
       operationId: GetInstanceResourceInfo
@@ -10734,6 +10866,47 @@ components:
         status:
           $ref: '#/components/schemas/InstanceStatus'
 
+    InstanceHeadStage:
+      type: object
+      description: |
+        Where a transfer from another node is written, on the node receiving
+        it.
+      properties:
+        dir:
+          type: string
+          description: |
+            The directory the transfer is written into: the destination, in
+            the stage of its head, or in place when its head stages none.
+        head_rid:
+          type: string
+          x-go-name: HeadRID
+          description: |
+            The resource holding the destination, empty when none of the
+            object does.
+        link_dest:
+          type: string
+          description: |
+            The destination as committed, on the filesystem of dir, which is
+            empty: the transfer hardlinks from it what did not change. Empty
+            for a stage seeded, or none.
+        seeded:
+          type: boolean
+          description: |
+            The directory holds the destination as committed, for a transfer
+            of the differences.
+        staged:
+          type: boolean
+          description: |
+            The transfer is written into a stage, which its commit switches
+            the head to. It is else written into the destination itself,
+            marked incomplete until its commit.
+      required:
+        - dir
+        - head_rid
+        - link_dest
+        - seeded
+        - staged
+
     InstanceActionAccepted:
       type: object
       properties:
@@ -14990,13 +15163,22 @@ components:
           the node that received the request.
         example: localhost
 
+    inQueryHeadStageName:
+      in: query
+      name: name
+      required: true
+      description: |
+        The name of the transfer: the session of the node sending it.
+      schema:
+        type: string
+
     inPathRid:
       in: path
       name: rid
       required: true
+      description: The resource identifier.
       schema:
         type: string
-        desc: The resource identifier.
         example: fs#1
 
     inQueryAllSlaves:

@@ -39,6 +39,14 @@ type (
 		PID      int    `json:"pid,omitempty"`
 		PIDStart uint64 `json:"pid_start,omitempty"`
 
+		// Held says the stage outlives the process that opened it: the
+		// session it is named after, of another node as one sending a
+		// transfer into it, holds it, and resumes it by its name to
+		// commit or discard it. No process is named then, and a recovery,
+		// as the start of the head does, discards the stage with what
+		// still writes into it: the holder is told at its commit.
+		Held bool `json:"held,omitempty"`
+
 		// Props are what the stager needs to finish its commit, read
 		// while the former generation was there to read them from.
 		Props map[string]string `json:"props,omitempty"`
@@ -58,6 +66,11 @@ const (
 // ErrHeadStageBusy is returned by a recovery finding the stage of a process
 // still running.
 var ErrHeadStageBusy = errors.New("the head is being staged by a running action")
+
+// ErrHeadStageDiscarded is returned to the holder of a stage resuming it once
+// a recovery discarded it, as the start of the head does: what was written
+// into it is lost, the head being what it was.
+var ErrHeadStageDiscarded = errors.New("stage discarded")
 
 // NewHeadStageJournal returns the journal of a stage named name this process
 // opens, at the step HeadStageStaged.
@@ -123,6 +136,35 @@ func (t *HeadStageJournal) Busy() bool {
 	}
 	start := processStart(t.PID)
 	return start != 0 && start == t.PIDStart
+}
+
+// Hold makes the stage one its opener leaves held: see Held.
+func (t *HeadStageJournal) Hold() {
+	t.Held = true
+	t.PID, t.PIDStart = 0, 0
+}
+
+// ResumeHeadStageJournal returns the journal in varDir of the stage named
+// name, for its holder to commit or discard it, and ErrHeadStageDiscarded
+// when the stage is no more, or is another.
+func ResumeHeadStageJournal(varDir, name string) (*HeadStageJournal, error) {
+	j, err := ReadHeadStageJournal(varDir)
+	if err != nil {
+		return nil, err
+	}
+	if j == nil || j.Name != name {
+		return nil, fmt.Errorf("%s: %w", name, ErrHeadStageDiscarded)
+	}
+	return j, nil
+}
+
+// HeadStageHeld says the var directory varDir journals a stage held, and not
+// committed: the stop of the head discards it, with its recovery, the
+// transfer written into it having nowhere left to be switched to, and its
+// mounts keeping busy what the stop is to free.
+func HeadStageHeld(varDir string) bool {
+	j, err := ReadHeadStageJournal(varDir)
+	return err == nil && j != nil && j.Held && j.Step == HeadStageStaged
 }
 
 // Adopt makes this process the one recovering the stage, as one read from

@@ -35,6 +35,15 @@ func (t *T) RecoverHeadStage(ctx context.Context) error {
 	return stager.Recover(ctx)
 }
 
+// ResumeHeadStage implements resource.HeadStager.
+func (t *T) ResumeHeadStage(ctx context.Context, name string) (resource.HeadStage, error) {
+	stager, err := t.headStager(ctx)
+	if err != nil {
+		return resource.HeadStage{}, err
+	}
+	return stager.Resume(ctx, name)
+}
+
 // headStager returns the stager of the directory, which the volume holding
 // it must be available for: the stage is in it, beside the directory.
 func (t *T) headStager(ctx context.Context) (*resource.DirStager, error) {

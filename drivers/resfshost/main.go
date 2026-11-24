@@ -102,6 +102,12 @@ func (t *T) Start(ctx context.Context) error {
 	if _, err := t.resolveMountPoint(); err != nil {
 		return err
 	}
+	// An action killed while staging the head, or while switching to its
+	// stage, left one to discard, or a switch to finish, as did a
+	// transfer from another node this start does not wait for.
+	if err := t.RecoverHeadStage(ctx); err != nil {
+		return err
+	}
 	if err := t.mount(ctx); err != nil {
 		return err
 	}
@@ -114,6 +120,13 @@ func (t *T) Start(ctx context.Context) error {
 func (t *T) Stop(ctx context.Context) error {
 	if _, err := t.resolveMountPoint(); err != nil {
 		return err
+	}
+	// The stage held for a transfer from another node is discarded: it
+	// is of the storage the stop frees.
+	if resource.HeadStageHeld(t.VarDir()) {
+		if err := t.RecoverHeadStage(ctx); err != nil {
+			return err
+		}
 	}
 	if v, err := t.isMounted(ctx); err != nil {
 		return err

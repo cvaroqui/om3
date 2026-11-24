@@ -79,6 +79,15 @@ var (
 			Text:     keywords.NewText(fs, "text/kw/target"),
 		},
 		{
+			Attr:       "Stage",
+			Candidates: []string{"auto", "never"},
+			Default:    "auto",
+			Option:     "stage",
+			Group:      ressync.GroupTransfer.ID,
+			Scopable:   true,
+			Text:       keywords.NewText(fs, "text/kw/stage"),
+		},
+		{
 			Attr:      "Snap",
 			Converter: converters.Bool,
 			Option:    "snap",

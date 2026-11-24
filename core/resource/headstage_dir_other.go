@@ -25,3 +25,20 @@ func (t *DirStager) Stage(ctx context.Context, name string) (HeadStage, bool, er
 func (t *DirStager) Recover(ctx context.Context) error {
 	return nil
 }
+
+// Resume finds no stage to resume.
+func (t *DirStager) Resume(ctx context.Context, name string) (HeadStage, error) {
+	return HeadStage{}, ErrHeadStageDiscarded
+}
+
+// IsMountRoot says dir is the root of a mount, where the system tells: not
+// here.
+func IsMountRoot(dir string) (bool, error) {
+	return false, nil
+}
+
+// mountsUnder returns the mount points under dir, where the system tells:
+// not here.
+func mountsUnder(dir string) ([]string, error) {
+	return nil, nil
+}

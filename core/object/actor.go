@@ -103,6 +103,7 @@ type (
 		SyncSnapshots(context.Context) ([]SyncSnapshot, error)
 		RestoredConfig(context.Context) ([]byte, []string, error)
 		SyncSplit(context.Context) error
+		SyncStage(context.Context, SyncStageOptions) (resource.SyncStage, error)
 		SyncUpdate(context.Context) error
 		SyncIngest(context.Context) error
 		Enter(context.Context, string) error

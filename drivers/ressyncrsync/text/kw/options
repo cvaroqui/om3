@@ -1,3 +1,7 @@
 A whitespace-separated list of params passed unchanged to `rsync`.
 
 Typical usage is ACL preservation activation.
+
+`--inplace` and `--append` are refused when the transfer is written into a
+stage of the peer rsync hardlinks from the committed tree, as the one of a
+directory: see `stage`.

@@ -789,6 +789,18 @@ func (t *T) RecoverHeadStage(ctx context.Context) error {
 	return stager.RecoverHeadStage(ctx)
 }
 
+// ResumeHeadStage implements resource.HeadStager.
+func (t *T) ResumeHeadStage(ctx context.Context, name string) (resource.HeadStage, error) {
+	stager, err := t.headStager(ctx)
+	if err != nil {
+		return resource.HeadStage{}, err
+	}
+	if stager == nil {
+		return resource.HeadStage{}, fmt.Errorf("%s: %w", name, resource.ErrHeadStageDiscarded)
+	}
+	return stager.ResumeHeadStage(ctx, name)
+}
+
 // headStager returns the resource of the vol holding its head, nil when it
 // stages none.
 func (t *T) headStager(ctx context.Context) (resource.HeadStager, error) {

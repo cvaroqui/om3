@@ -3101,6 +3101,30 @@ func newCmdObjectInstancePromote(kind string) *cobra.Command {
 	return cmd
 }
 
+// newCmdObjectInstanceSyncStage is a step of the stage a transfer from
+// another node is written into, which the daemon of the node receiving it
+// runs in a process of its own: it is not a command an operator asks, and
+// is kept out of the help.
+func newCmdObjectInstanceSyncStage(kind string) *cobra.Command {
+	var options commands.CmdObjectInstanceSyncStage
+	cmd := &cobra.Command{
+		Use:    "sync-stage",
+		Short:  "open, commit or discard the stage a transfer from another node is written into",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return options.Run(kind)
+		},
+	}
+	flags := cmd.Flags()
+	addFlagsGlobal(flags, &options.OptsGlobal)
+	flags.StringVar(&options.RID, "rid", "", "the sync resource receiving the transfer")
+	flags.StringVar(&options.Name, "name", "", "the name of the transfer")
+	flags.StringVar(&options.Step, "step", "", "open, commit or discard")
+	flags.BoolVar(&options.Seeded, "seeded", false, "open no stage but one holding the destination as committed")
+	return cmd
+}
+
 func newCmdObjectSyncRestore(kind string) *cobra.Command {
 	var options commands.CmdObjectInstanceRestore
 	cmd := commoncmd.NewCmdObjectSyncRestore(kind)

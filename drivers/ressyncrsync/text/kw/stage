@@ -1,0 +1,22 @@
+How a transfer is written on a peer: `auto` asks the peer for a stage of the
+head holding `dst`, a generation apart from the live one, writes into it,
+and has the peer switch its head to it once the transfer is written whole.
+A failover during a transfer then starts on the head as the last transfer
+written whole left it, and the transfer under way fails, its stage
+discarded.
+
+The stage is a clone of a zfs dataset, a snapshot of a btrfs subvolume
+mounted by its path or of an LVM thin volume, which hold the committed tree
+and receive its differences, or a sibling of a directory, empty, which rsync
+hardlinks the unchanged files into with `--link-dest`. With the latter, the
+`--inplace` and `--append` options are refused: they would write through the
+links into the committed tree.
+
+A peer whose head stages none is written in place, and its head is marked
+incomplete during the transfer, which a start refuses to run on unless
+forced, until a transfer is written whole. So is a directory when `dst` is a
+part of it, or when the `options` leave a part of the destination as it is,
+as `--exclude` does: its stage, a tree of its own, would not hold it. So is
+a head with a filesystem mounted under it.
+
+`never` writes in place, with no stage and no mark.

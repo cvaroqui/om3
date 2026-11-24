@@ -2444,6 +2444,32 @@ type InstanceDeviceList struct {
 // InstanceDeviceListKind defines model for InstanceDeviceList.Kind.
 type InstanceDeviceListKind string
 
+// InstanceHeadStage Where a transfer from another node is written, on the node receiving
+// it.
+type InstanceHeadStage struct {
+	// Dir The directory the transfer is written into: the destination, in
+	// the stage of its head, or in place when its head stages none.
+	Dir string `json:"dir"`
+
+	// HeadRID The resource holding the destination, empty when none of the
+	// object does.
+	HeadRID string `json:"head_rid"`
+
+	// LinkDest The destination as committed, on the filesystem of dir, which is
+	// empty: the transfer hardlinks from it what did not change. Empty
+	// for a stage seeded, or none.
+	LinkDest string `json:"link_dest"`
+
+	// Seeded The directory holds the destination as committed, for a transfer
+	// of the differences.
+	Seeded bool `json:"seeded"`
+
+	// Staged The transfer is written into a stage, which its commit switches
+	// the head to. It is else written into the destination itself,
+	// marked incomplete until its commit.
+	Staged bool `json:"staged"`
+}
+
 // InstanceItem defines model for InstanceItem.
 type InstanceItem struct {
 	Data Instance         `json:"data"`
@@ -4344,6 +4370,9 @@ type InPathNodeName = string
 // InPathOrchestrationID An orchestration id.
 type InPathOrchestrationID = string
 
+// InPathRid defines model for inPathRid.
+type InPathRid = string
+
 // InQueryAbortRestore defines model for inQueryAbortRestore.
 type InQueryAbortRestore = bool
 
@@ -4442,6 +4471,9 @@ type InQueryForceAffinity = bool
 
 // InQueryHBA defines model for inQueryHBA.
 type InQueryHBA = string
+
+// InQueryHeadStageName defines model for inQueryHeadStageName.
+type InQueryHeadStageName = string
 
 // InQueryImpersonate The node name to impersonate when evaluating a keyword. Setting impersonate without evaluate=true returns a Bad Request error.
 type InQueryImpersonate = string
@@ -6202,6 +6234,30 @@ type GetInstanceResourceFileParams struct {
 
 	// Rid The rid that is expected to expose the requested file path.
 	Rid InQueryResourceFileRid `form:"rid" json:"rid"`
+}
+
+// PostInstanceResourceHeadCommitParams defines parameters for PostInstanceResourceHeadCommit.
+type PostInstanceResourceHeadCommitParams struct {
+	// Name The name of the transfer: the session of the node sending it.
+	Name InQueryHeadStageName `form:"name" json:"name"`
+}
+
+// PostInstanceResourceHeadDiscardParams defines parameters for PostInstanceResourceHeadDiscard.
+type PostInstanceResourceHeadDiscardParams struct {
+	// Name The name of the transfer: the session of the node sending it.
+	Name InQueryHeadStageName `form:"name" json:"name"`
+}
+
+// PostInstanceResourceHeadStageParams defines parameters for PostInstanceResourceHeadStage.
+type PostInstanceResourceHeadStageParams struct {
+	// Name The name of the transfer: the session of the node sending it.
+	Name InQueryHeadStageName `form:"name" json:"name"`
+
+	// Seeded Open no stage but one holding the destination as committed: the
+	// transfer leaves a part of the destination as it is, as one
+	// excluding files does, which a stage that is an empty tree would
+	// not hold once switched to.
+	Seeded *bool `form:"seeded,omitempty" json:"seeded,omitempty"`
 }
 
 // PostInstanceStateFileParams defines parameters for PostInstanceStateFile.

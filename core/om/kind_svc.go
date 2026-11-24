@@ -143,6 +143,7 @@ func init() {
 		newCmdObjectInstanceIngest(kind),
 		newCmdObjectInstanceFollow(kind),
 		newCmdObjectInstancePromote(kind),
+		newCmdObjectInstanceSyncStage(kind),
 		newCmdObjectInstanceResync(kind),
 		newCmdObjectInstanceSplit(kind),
 		newCmdObjectInstanceUpdate(kind),

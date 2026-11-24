@@ -180,7 +180,7 @@ OpenSVC v3 is a major evolution, rebuilt in Go for performance, reliability, and
 
 * **A restore never leaves a head half-written**: `om <path> sync restore` of a `sync.store` resource no longer writes into a head the object would be started on, when its storage makes a stage of it. The member of a `fs.zfs` head is restored into a clone of the dataset, mounted in the var directory of the resource, and the one of a `fs.directory` head into a sibling of the directory; a `volume` head is staged by the resource of its vol holding it. Once every head of the run is restored, each head is switched to its stage: the clone promoted and renamed to the dataset, with the snapshots and the properties set on the former one, which is destroyed, or the directories exchanged in one rename. A restore failing, interrupted or killed before the switch leaves the heads as the last restore written whole left them, its stages discarded by itself, by the next start of the resources or by the next restore, and writes no receipt. A restore killed during the switch is finished by the next start, from the journal each stage keeps: the file `head_stage.json` of the var directory of the head, and for a dataset its user property `com.opensvc:stage`, which follows the pool to the node importing it, so a pool failing over during a switch is finished there. A stage needs the room of the run beside the head.
 
-    The heads with no stage are restored in place as before, emptied then written: a filesystem mounted as the head, a dataset with children, encrypted, the root of its pool or mounted in a container, a directory with a `size`, a directory restored from a run saved without the paths of `exclude`, a head holding the head of another resource or a mount. Such a head is marked incomplete from before it is emptied until the restore is done, the mark shown as a warning of its resource, and a start of the resources using the heads is refused while a head is marked: `om <path> instance start --force` starts on it as it is and clears the mark, and a start of the heads alone, which a restore needs up, is not refused. A `deploy --store`, or any provision restoring the heads it makes from `restore_from`, marks each head the same way while it writes it: a provision failing or killed meanwhile leaves the mark, which a restore, a forced start, or the unprovision of the resource clears.
+    The heads with no stage are restored in place as before, emptied then written: a filesystem on a device that is neither a btrfs subvolume mounted by its path nor on an LVM thin volume, a dataset with children, encrypted, the root of its pool or mounted in a container, a directory with a `size`, a directory restored from a run saved without the paths of `exclude`, a head holding the head of another resource or a mount. Such a head is marked incomplete from before it is emptied until the restore is done, the mark shown as a warning of its resource, and a start of the resources using the heads is refused while a head is marked: `om <path> instance start --force` starts on it as it is and clears the mark, and a start of the heads alone, which a restore needs up, is not refused. A `deploy --store`, or any provision restoring the heads it makes from `restore_from`, marks each head the same way while it writes it: a provision failing or killed meanwhile leaves the mark, which a restore, a forced start, or the unprovision of the resource clears.
 
     The new `stage` keyword of `sync.store`, `auto` by default, and the `--stage` option of the restore, the `stage` parameter of `POST /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/action/restore`, say which: `auto` stages the heads that can be and restores the others in place, `always` refuses a head with no stage before anything is written, `never` restores every head in place. A restore in place still refuses to run while the resources using the heads are up, staged or not. It tells its progress in `restore_progress.json`, in the var directory of the `sync.store` resource, while it runs: the run, the session, the pid, `bytes_total` and `bytes_done`. An interrupt of the command, `SIGINT` or `SIGTERM`, cancels the restore, which discards its stages, rather than kill it.
 
@@ -205,6 +205,12 @@ OpenSVC v3 is a major evolution, rebuilt in Go for performance, reliability, and
     An object whose store records another cluster as its primary does not start: `om <path> instance start`, and so the orchestrated and the daemon's own starts, are refused naming the primary and `replica --of`, unless `--force`. The store is read at a start only, by a `sync.store` resource of a store keeping documents, and a store not answering refuses no start.
 
     The restore is settled by an `om` process the daemon runs, the hidden `om <path> instance promote`, which holds the lock of the object, never by the daemon itself. Each node of a flex replica settles its own follow first, by the same rule, asked through the new `POST /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/action/promote`, which records nothing: the primary is recorded once every node heard answered, their answers in the `followers` of the promotion, the nodes not heard in `skipped_nodes`. A node refusing, as on a head restored in place, refuses the promotion.
+
+* **A `sync.rsync` transfer never leaves a peer half-copied**: `sync update` and `sync full` of a `sync.rsync` resource no longer write into the destination a peer would be started on, when the storage of the peer makes a stage of the head holding `dst`. The node sending asks the peer for a stage before the transfer, writes into it, and asks for its commit once rsync ended well: the head of the peer is at any time what the last transfer written whole left. The stage is the one of a restore: a clone of the dataset of a `fs.zfs`, a sibling of a `fs.directory`, the one of the vol of a `volume`, and two new ones, for a filesystem on a device: a writable snapshot of the subvolume a `btrfs` mounts by its path (`subvol`, or `subvol=` in `mnt_opt`), exchanged with it in one rename, and a thin snapshot of the LVM thin volume holding the filesystem, renamed to it. These two stage the restores of a `sync.store` too. A clone or a snapshot holds the committed tree and receives its differences, with the options of the resource, `--inplace` included; the sibling of a directory is empty, and rsync hardlinks into it what did not change, with `--link-dest`.
+
+    The peer holds no lock during the transfer. A start of its instance, as a failover, waits for nothing: it discards the stage, ends the rsync receiving into it, and starts on the head as last committed; the update on the other node fails, at the transfer cut or at its commit, told `stage discarded`. So does a stop of the head. An update failing, or interrupted, discards its stage, and the next one discards the stage an update killed left. The steps are asked through three root-only requests the daemon of the node passes on to the peer, `POST /api/node/name/{nodename}/instance/path/{namespace}/{kind}/{name}/resource/{rid}/head/stage`, `.../head/commit` and `.../head/discard`, each a short action under the lock of the instance on the peer; rsync still travels over ssh, and the `local` target stages with no request. With no daemon answering, the transfer is written in place as before, with a warning.
+
+    The new `stage` keyword of `sync.rsync` chooses: `auto`, the default, or `never`, which writes in place.
 
 * **Live migration for KVM**: Full support for live migration of KVM instances with data on `disk.disk` and `disk.drbd` resources using `om <svc> switch --live` and `om <svc> takeover --live` commands.
 
@@ -1682,6 +1688,29 @@ which share the same executor.
     setting `snap`, a `sync.zfs` or a `sync.btrfs`, `delay_snap` not set, whose schedule differs from the one of the
     first, as their snapshots are taken in separate runs, and a run of a part of them names the ones it leaves out.
     A `sync.zfssnap` or a `sync.btrfssnap` keeps a schedule of its own, and is not warned of.
+
+* **`--inplace` and `--append` are refused onto a directory head:**
+    a `sync.rsync` whose `options` hold `--inplace`, `--append` or `--append-verify`, and whose `dst` is the directory of
+    a `fs.directory` of the peer, or of a `volume` whose vol holds one, now fails before it transfers anything: the
+    transfer is written into a stage rsync hardlinks from the committed tree, which these options would write
+    through. Remove the option, or set `stage = never` to write in place as before.
+
+* **A peer written in place refuses to start after a transfer cut short:**
+    a peer whose head makes no stage, a filesystem on a device that is neither a btrfs subvolume nor an LVM thin
+    volume, a `dst` that is a part of a directory head or that no resource holds, a head with a filesystem mounted
+    under it, a directory head receiving a transfer whose `options` leave a part of the destination as it is
+    (`--exclude`, `--filter`, `--files-from`, `--update`, `--max-size`, `--dry-run` and their like), is written in
+    place as before, and its head is marked incomplete from before the transfer until a transfer ends well. A
+    transfer failing, interrupted, or whose node died leaves the mark: the start of the apps, containers and shares
+    of the peer is refused, as on a head a restore left half-written, until the next update succeeds, or
+    `om <path> instance start --force` takes the head as it is. `stage = never` marks nothing.
+
+* **The head of a peer is switched at the end of a transfer:**
+    the commit of a stage unmounts a zfs, btrfs or thin volume head of the peer to switch it, and mounts it again: a
+    head in use on the peer, as by a shell, fails the update, the stage discarded. A directory head is switched by a
+    rename, whatever uses it, and is another inode after each update. `dstfs` is checked by the peer rather than over
+    ssh. An interrupt of an update, `SIGINT` or `SIGTERM`, ends rsync and discards the stage before the command
+    exits.
 
 ### Driver: sync.zfs
 

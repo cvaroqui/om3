@@ -54,6 +54,10 @@ type (
 	}
 )
 
+func (t *fakeStager) ResumeHeadStage(context.Context, string) (resource.HeadStage, error) {
+	return resource.HeadStage{}, resource.ErrHeadStageDiscarded
+}
+
 func (t *fakeStager) StageHead(_ context.Context, _ string) (resource.HeadStage, bool, error) {
 	if t.unable {
 		return resource.HeadStage{}, false, nil
@@ -157,6 +161,10 @@ func (t dirStager) StageHead(ctx context.Context, name string) (resource.HeadSta
 
 func (t dirStager) RecoverHeadStage(ctx context.Context) error {
 	return t.Recover(ctx)
+}
+
+func (t dirStager) ResumeHeadStage(ctx context.Context, name string) (resource.HeadStage, error) {
+	return t.Resume(ctx, name)
 }
 
 func (f *stageFixture) restore(ctx context.Context, s backup.Store, mode string) (bool, error) {

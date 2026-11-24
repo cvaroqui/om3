@@ -98,9 +98,14 @@ func (t *DirStager) Stage(ctx context.Context, name string) (HeadStage, bool, er
 		_ = os.Lchown(stage, int(st.Uid), int(st.Gid))
 	}
 	_ = os.Chmod(stage, info.Mode().Perm())
+	return t.handle(j), true, nil
+}
+
+// handle returns the stage whose journal is j.
+func (t *DirStager) handle(j *HeadStageJournal) HeadStage {
 	return HeadStage{
-		Dir:      stage,
-		LinkDest: dir,
+		Dir:      t.stageDir(),
+		LinkDest: filepath.Clean(t.Dir),
 		Seal:     func(context.Context) error { return t.seal(j) },
 		Commit: func(context.Context) error {
 			if err := t.seal(j); err != nil {
@@ -109,7 +114,20 @@ func (t *DirStager) Stage(ctx context.Context, name string) (HeadStage, bool, er
 			return t.finish(j)
 		},
 		Discard: func(context.Context) error { return t.discard(j) },
-	}, true, nil
+		Hold: func(context.Context) error {
+			j.Hold()
+			return j.Write(t.VarDir)
+		},
+	}
+}
+
+// Resume returns the stage named name a former process left held.
+func (t *DirStager) Resume(ctx context.Context, name string) (HeadStage, error) {
+	j, err := ResumeHeadStageJournal(t.VarDir, name)
+	if err != nil {
+		return HeadStage{}, err
+	}
+	return t.handle(j), nil
 }
 
 // seal journals the decision to commit, with the inode of the stage.
@@ -177,6 +195,13 @@ func (t *DirStager) discard(j *HeadStageJournal) error {
 	}
 	stage := t.stageDir()
 	t.Log.Infof("discard the stage %s of %s", stage, t.Dir)
+	if j.Held {
+		// The receiver of a transfer would write on into the tree
+		// being removed.
+		if err := KillHeadStageWriters(stage, t.Log); err != nil {
+			return err
+		}
+	}
 	if err := removeTree(stage); err != nil {
 		return err
 	}
@@ -212,6 +237,11 @@ func inodeOf(p string) (uint64, error) {
 	return st.Ino, nil
 }
 
+// IsMountRoot says dir is the root of a mount.
+func IsMountRoot(dir string) (bool, error) {
+	return isMountRoot(filepath.Clean(dir))
+}
+
 // isMountRoot says dir is the root of a mount, as the kernel tells, or as
 // its device, another than the one of its parent, does on a kernel not
 // telling.
@@ -228,6 +258,23 @@ func isMountRoot(dir string) (bool, error) {
 		return false, err
 	}
 	return st.Dev != pst.Dev || st.Ino == pst.Ino, nil
+}
+
+// mountsUnder returns the mount points under the directory dir, itself apart.
+func mountsUnder(dir string) ([]string, error) {
+	entries, err := mountinfo.Read()
+	if err != nil {
+		return nil, err
+	}
+	dir = filepath.Clean(dir)
+	l := make([]string, 0)
+	for _, e := range entries {
+		target := filepath.Clean(e.Target)
+		if target != dir && strings.HasPrefix(target, strings.TrimSuffix(dir, "/")+"/") {
+			l = append(l, target)
+		}
+	}
+	return l, nil
 }
 
 // canExchange says the filesystem of the directory the stage is made in

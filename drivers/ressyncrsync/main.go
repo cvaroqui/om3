@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,6 +54,11 @@ type (
 		Timeout        *time.Duration
 		Topology       topology.T
 
+		// Stage says whether a transfer is written into a stage of
+		// the head of the peer, committed once written whole: auto or
+		// never.
+		Stage string
+
 		// prepared is what PrepareSync took for the transfers of the
 		// action, nil when it took nothing: the transfers copy from
 		// it, the lock and the run held until its release.
@@ -59,6 +67,12 @@ type (
 		// newSnapper returns the snapshots of an update, replaced by the
 		// tests.
 		newSnapper func() snapper
+
+		// newPeerStager returns what opens the stage of a transfer on
+		// nodename, and runRsync runs the transfer: both replaced by
+		// the tests.
+		newPeerStager func(nodename string) (peerStager, error)
+		runRsync      func(ctx context.Context, nodename string, args []string) error
 	}
 
 	// preparedSync is the snapshots PrepareSync took.
@@ -257,6 +271,14 @@ func (t *T) lockedSync(ctx context.Context, mode modeT, target []string) (err er
 			return err
 		}
 	}
+	if t.stageMode() != stageNever {
+		// An interrupt of the command cancels the transfers, which
+		// then discard their stages on the peers and say they failed,
+		// rather than kill them with their stages left.
+		var stop context.CancelFunc
+		ctx, stop = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+	}
 	// The peers are synced at once, each on its own: one failing, or slow,
 	// does not hold the others back, and all the failures are reported.
 	var (
@@ -433,17 +455,58 @@ func (t *T) user() string {
 }
 
 func (t *T) peerSync(ctx context.Context, mode modeT, nodename string, sources []string) (err error) {
-	if v, err := t.isDstFSMounted(nodename); err != nil {
+	options := t.fullOptions()
+	dir := t.Dst
+	stage, asked, err := t.openStage(ctx, nodename)
+	if err != nil {
+		return err
+	}
+	if asked {
+		// Whatever ends the transfer short of its commit, its stage
+		// is discarded, the head of the peer left as last committed:
+		// a transfer cancelled still asks for it.
+		defer func() {
+			if err == nil {
+				return
+			}
+			dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), stageDiscardTimeout)
+			defer cancel()
+			if discardErr := stage.stager.Discard(dctx, stage.name); discardErr != nil {
+				err = errors.Join(err, fmt.Errorf("discard the stage: %w", discardErr))
+			}
+		}()
+		if options, err = stageOptions(options, stage.SyncStage, nodename); err != nil {
+			return err
+		}
+		dir = stage.Dir
+	} else if v, err := t.isDstFSMounted(nodename); err != nil {
 		return err
 	} else if !v {
 		t.Log().Errorf("The destination fs %s is not mounted on node %s. Refuse to sync %s to protect parent fs", t.DstFS, nodename, t.Dst)
 		return fmt.Errorf("the destination fs %s is not mounted on node %s. refuse to sync %s to protect parent fs", t.DstFS, nodename, t.Dst)
 	}
-	options := t.fullOptions()
-	dst := t.user() + "@" + nodename + ":" + t.Dst
+	dst := t.user() + "@" + nodename + ":" + dir
 	args := append([]string{}, options...)
 	args = append(args, sources...)
 	args = append(args, dst)
+	run := t.runRsync
+	if run == nil {
+		run = t.rsync
+	}
+	if err := run(ctx, nodename, args); err != nil {
+		return err
+	}
+	if asked {
+		if err := stage.stager.Commit(ctx, stage.name); err != nil {
+			return fmt.Errorf("commit the stage: %w", err)
+		}
+	}
+	return nil
+}
+
+// rsync runs the transfer to nodename, and logs what it sent. A context
+// cancelled ends it.
+func (t *T) rsync(ctx context.Context, nodename string, args []string) error {
 	var timeout time.Duration
 	if t.Timeout != nil {
 		timeout = *t.Timeout
@@ -485,6 +548,7 @@ func (t *T) peerSync(ctx context.Context, mode modeT, nodename string, sources [
 	stats := ressync.NewStats(nodename)
 
 	cmd := command.New(
+		command.WithContext(ctx),
 		command.WithName(rsync),
 		command.WithArgs(args),
 		command.WithTimeout(timeout),
