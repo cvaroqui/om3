@@ -373,6 +373,12 @@ type (
 		// cluster.
 		Node string `json:"node,omitempty"`
 
+		// SkippedHeads are the heads the node did not restore itself,
+		// shared with the nodes of its cluster and restored by the
+		// placement leader there: RPOBreachedAt counts them as the
+		// freshest copy of the cluster skipping none holds them.
+		SkippedHeads []string `json:"skipped_heads,omitempty"`
+
 		// RunID is the run the replica restored last, and SeenRunID
 		// the latest run it listed then.
 		RunID     string `json:"run_id"`

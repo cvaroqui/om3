@@ -13568,6 +13568,13 @@ components:
             the node of that cluster holding the copy judged, when the
             cluster keeps one per node, as the instances of a flex replica,
             each an entry of its own
+        skipped_heads:
+          type: array
+          description: |
+            the heads the node did not restore itself, shared with the nodes
+            of its cluster and restored by the placement leader there
+          items:
+            type: string
         run_id:
           type: string
           description: the run the replica restored last

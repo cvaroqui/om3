@@ -21,6 +21,7 @@ import (
 	"github.com/opensvc/om3/v3/core/xconfig"
 	"github.com/opensvc/om3/v3/daemon/api"
 	"github.com/opensvc/om3/v3/util/hostname"
+	"github.com/opensvc/om3/v3/util/mountinfo"
 )
 
 // The sync.store resource of a replica, an object whose replica_of keyword
@@ -111,13 +112,38 @@ type (
 		// be asked.
 		apply func(ctx context.Context, body []byte) ([]string, error)
 
-		// restore restores the heads from the run, and says whether
-		// it touched one.
-		restore func(ctx context.Context, run backup.Run) (bool, error)
+		// restore restores the heads members from the run, and says
+		// whether it touched one.
+		restore func(ctx context.Context, run backup.Run, members []string) (bool, error)
+
+		// multiNode says the replica has instances on several nodes.
+		multiNode bool
+
+		// heads returns the heads the members of the run are
+		// restored into.
+		heads func(run backup.Run) []followHead
+
+		// leader says the node is the placement leader of the
+		// replica, as its instance monitor says.
+		leader func(ctx context.Context) (bool, error)
+
+		// fsType returns the type of the filesystem holding the
+		// directory dir, empty when it can not be told.
+		fsType func(dir string) string
 
 		// validate says whether the configuration of the object
 		// validates on this node.
 		validate func() (bool, []string)
+	}
+
+	// followHead is a head a member of a run is restored into.
+	followHead struct {
+		rid string
+		dir string
+
+		// shared says the resource holding the head is flagged
+		// shared: one storage every node of the cluster reaches.
+		shared bool
 	}
 
 	// followVerdict is what the record of the follows says of a replica.
@@ -260,7 +286,11 @@ func (t *T) followEnv(s backup.Store) followEnv {
 		return t.followedDrift(ctx, s, run)
 	}
 	env.apply = t.applyFollowedConfig
-	env.restore = func(ctx context.Context, run backup.Run) (bool, error) {
+	env.multiNode = t.replicaNodes() > 1
+	env.heads = t.followHeadsOf
+	env.leader = t.isPlacementLeader
+	env.fsType = fsTypeOf
+	env.restore = func(ctx context.Context, run backup.Run, members []string) (bool, error) {
 		mode, err := t.stageMode("")
 		if err != nil {
 			return false, err
@@ -270,7 +300,7 @@ func (t *T) followEnv(s backup.Store) followEnv {
 		// resources of a replica are the ones of its source, and a
 		// head may be elsewhere on its nodes, by a keyword scoped
 		// for them.
-		touched, err := t.restoreInPlace(ctx, s, run, headMembers(run), true, mode)
+		touched, err := t.restoreInPlace(ctx, s, run, members, true, mode)
 		if err != nil {
 			return touched, err
 		}
@@ -606,9 +636,13 @@ func (t *T) followHeads(ctx context.Context, s backup.Store, src backup.ReplicaS
 			return errors.Join(fmt.Errorf("the configuration of run %s is not applied, differing on %s: its heads are not restored", latest.ShortID(), strings.Join(drift, " ")), save())
 		}
 	}
+	members, skipped, err := t.planFollow(ctx, latest, env)
+	if err != nil {
+		return errors.Join(err, save())
+	}
 	t.Log().Infof("follow run %s of the cluster %s, begun at %s, from store %s", latest.ShortID(), latest.ClusterName, latest.CreatedAt.Format(time.RFC3339), s.Ref())
-	touched, err := env.restore(ctx, latest)
-	t.acknowledgeFrom(ctx, s, latest, env.clusterID, env.clusterName, env.node, env.perNode, env.validate, touched, err)
+	touched, err := env.restore(ctx, latest, members)
+	t.acknowledgeFrom(ctx, s, latest, env.clusterID, env.clusterName, env.node, env.perNode, skipped, env.validate, touched, err)
 	if err != nil {
 		if touched {
 			// A head was emptied, written or switched, and not
@@ -751,4 +785,132 @@ func (t *T) startedConsumers(ctx context.Context) []string {
 	}
 	slices.Sort(l)
 	return l
+}
+
+// sharedFSTypes are the types of the filesystems several nodes mount at
+// once: a head on one is the same storage on every node of the replica.
+var sharedFSTypes = []string{"nfs", "nfs4", "gfs2", "ocfs2", "glusterfs", "fuse.glusterfs", "cephfs", "ceph"}
+
+// planFollow returns the members of the run this node restores, and the
+// ones it leaves to another: the heads of a flex replica, each instance of
+// which follows the copy it holds.
+//
+// A head flagged shared is one storage every node of the replica reaches,
+// which each node restoring would write at once: its placement leader alone
+// restores it, as it alone provisions it, and the other nodes skip it, a
+// follow asked by hand included. The receipt of a node skipping heads says
+// which, so the source does not take its copy for holding them.
+//
+// A head on a filesystem several nodes mount at once, not flagged shared,
+// is refused before anything is written, when the replica has several
+// nodes: every node would restore the same directory. The refusal is one of
+// the configuration, to fix on the source, and writes no receipt, the
+// replica holding what its last one says.
+func (t *T) planFollow(ctx context.Context, run backup.Run, env followEnv) (members, skipped []string, err error) {
+	all := headMembers(run)
+	if !env.perNode || env.heads == nil {
+		return all, nil, nil
+	}
+	heads := env.heads(run)
+	shared := make([]string, 0)
+	unmarked := make([]string, 0)
+	for _, h := range heads {
+		switch {
+		case h.shared:
+			shared = append(shared, h.rid)
+		case env.multiNode && h.dir != "" && env.fsType != nil && slices.Contains(sharedFSTypes, env.fsType(h.dir)):
+			unmarked = append(unmarked, fmt.Sprintf("%s (%s, %s)", h.rid, h.dir, env.fsType(h.dir)))
+		}
+	}
+	if len(unmarked) > 0 {
+		return nil, nil, fmt.Errorf("%s: on a filesystem the nodes of the replica mount at once, which each of them would restore: set 'shared = true' on the resource in the configuration of the source, for the placement leader alone to restore it", strings.Join(unmarked, ", "))
+	}
+	if len(shared) == 0 {
+		return all, nil, nil
+	}
+	leader, err := env.leader(ctx)
+	if err != nil {
+		// Not knowing, the node does not write a storage another
+		// node may be writing.
+		t.Log().Warnf("the placement leader can not be told, the shared heads %s are left to it: %s", strings.Join(shared, " "), err)
+		leader = false
+	}
+	if leader {
+		return all, nil, nil
+	}
+	for _, m := range all {
+		if slices.Contains(shared, m) {
+			skipped = append(skipped, m)
+		} else {
+			members = append(members, m)
+		}
+	}
+	t.Log().Debugf("skip the shared heads %s, which the placement leader restores", strings.Join(skipped, " "))
+	return members, skipped, nil
+}
+
+// followHeadsOf returns the heads the members of run are restored into,
+// each the one of the resource of its rid. A member of no resource is left
+// to the restore to refuse.
+func (t *T) followHeadsOf(run backup.Run) []followHead {
+	o := t.GetObjectDriver()
+	l := make([]followHead, 0)
+	for _, rid := range headMembers(run) {
+		r := o.ResourceByID(rid)
+		if r == nil {
+			continue
+		}
+		h := followHead{rid: rid, shared: r.IsShared()}
+		if i, ok := r.(header); ok {
+			h.dir = i.Head()
+		}
+		l = append(l, h)
+	}
+	return l
+}
+
+// replicaNodes returns how many nodes host the instances of the replica,
+// its drpnodes.
+func (t *T) replicaNodes() int {
+	cfg := t.objectConfig()
+	if cfg == nil {
+		return 0
+	}
+	return len(cfg.GetStrings(object.ScopeKey(cfg)))
+}
+
+// isPlacementLeader says the node is the placement leader of the object, as
+// the monitor of its instance says, which the scheduler reads too.
+func (t *T) isPlacementLeader(ctx context.Context) (bool, error) {
+	c, err := client.New()
+	if err != nil {
+		return false, err
+	}
+	resp, err := c.GetInstanceWithResponse(ctx, hostname.Hostname(), t.Path.Namespace, t.Path.Kind, t.Path.Name)
+	switch {
+	case err != nil:
+		return false, err
+	case resp.JSON200 == nil || resp.JSON200.Data.Monitor == nil:
+		return false, fmt.Errorf("the daemon tells no monitor of the instance: %s", resp.Status())
+	}
+	return resp.JSON200.Data.Monitor.IsLeader, nil
+}
+
+// fsTypeOf returns the type of the filesystem holding dir, the one of the
+// deepest mount it is under, empty when the mounts can not be read.
+func fsTypeOf(dir string) string {
+	entries, err := mountinfo.Read()
+	if err != nil {
+		return ""
+	}
+	dir = filepath.Clean(dir)
+	best, fsType := -1, ""
+	for _, e := range entries {
+		target := filepath.Clean(e.Target)
+		// The last mount of a mount point is the one shown.
+		if within(dir, target) && len(target) >= best {
+			best, fsType = len(target), e.FSType
+		}
+	}
+	return fsType
 }

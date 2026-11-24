@@ -85,6 +85,22 @@ func judgeReplicas(now time.Time, receipts []backup.Receipt, runs []backup.Run, 
 	warn := func(format string, args ...any) {
 		v.warns = append(v.warns, fmt.Sprintf(format, args...))
 	}
+	// The shared heads of a cluster keeping a copy per node are restored
+	// by one of its nodes, the others skipping them: they are as old as
+	// the freshest run a node of the cluster holds whole.
+	whole := make(map[string]backup.Run)
+	for _, receipt := range receipts {
+		if !receipt.PerNode || len(receipt.SkippedHeads) > 0 || receipt.RestoreError != "" {
+			continue
+		}
+		run, ok := find(receipt.RunID)
+		if !ok {
+			continue
+		}
+		if cur, ok := whole[receipt.ReplicaClusterID]; !ok || run.CreatedAt.After(cur.CreatedAt) {
+			whole[receipt.ReplicaClusterID] = run
+		}
+	}
 	for _, receipt := range receipts {
 		name := receipt.ReplicaClusterName
 		if name == "" {
@@ -101,6 +117,7 @@ func judgeReplicas(now time.Time, receipts []backup.Receipt, runs []backup.Run, 
 			Cluster:      receipt.ReplicaClusterName,
 			ClusterID:    receipt.ReplicaClusterID,
 			Node:         node,
+			SkippedHeads: slices.Clone(receipt.SkippedHeads),
 			RunID:        receipt.RunID,
 			SeenRunID:    receipt.SeenRunID,
 			ConfigValid:  receipt.ConfigValid,
@@ -122,7 +139,18 @@ func judgeReplicas(now time.Time, receipts []backup.Receipt, runs []backup.Run, 
 		case !known:
 			rs.RPOBreachedAt = noCopyRPOBreach
 			warn("replica %s: restored the unknown run %s, not a run of the object this cluster holds, as one its retention dropped", name, short(receipt.RunID))
+		case len(receipt.SkippedHeads) > 0 && !hasWhole(whole, receipt):
+			// The node holds the run but for its shared heads, which
+			// no node of its cluster says it restored.
+			rs.RPOBreachedAt = noCopyRPOBreach
+			warn("replica %s: holds run %s without %s, shared heads no node of its cluster restored: its placement leader does not follow", name, restored.ShortID(), strings.Join(receipt.SkippedHeads, " "))
 		default:
+			if len(receipt.SkippedHeads) > 0 {
+				// The copy is as old as the oldest of its heads.
+				if shared := whole[receipt.ReplicaClusterID]; shared.CreatedAt.Before(restored.CreatedAt) {
+					restored = shared
+				}
+			}
 			if d := maxDelay(restored.CreatedAt); d > 0 {
 				rs.RPOBreachedAt = restored.CreatedAt.Add(d)
 				if now.After(rs.RPOBreachedAt) {
@@ -175,6 +203,13 @@ func judgeReplicas(now time.Time, receipts []backup.Receipt, runs []backup.Run, 
 		v.replicas = append(v.replicas, rs)
 	}
 	return v
+}
+
+// hasWhole says a node of the cluster of receipt holds a run whole, its
+// shared heads included.
+func hasWhole(whole map[string]backup.Run, receipt backup.Receipt) bool {
+	_, ok := whole[receipt.ReplicaClusterID]
+	return ok
 }
 
 // statusReplicas judges the replicas of the object from the receipts they
@@ -294,7 +329,7 @@ func (t *T) acknowledge(ctx context.Context, s backup.Store, run backup.Run, tou
 		return
 	}
 	clusterID, clusterName := t.cluster()
-	t.acknowledgeFrom(ctx, s, run, clusterID, clusterName, hostname.Hostname(), t.receiptPerNode(), t.validateConfig, touched, restoreErr)
+	t.acknowledgeFrom(ctx, s, run, clusterID, clusterName, hostname.Hostname(), t.receiptPerNode(), nil, t.validateConfig, touched, restoreErr)
 }
 
 // receiptPerNode says the receipts of the object are per node: a flex
@@ -308,12 +343,13 @@ func (t *T) receiptPerNode() bool {
 }
 
 func (t *T) acknowledgeAs(ctx context.Context, s backup.Store, run backup.Run, clusterID, clusterName string, validate func() (bool, []string), touched bool, restoreErr error) {
-	t.acknowledgeFrom(ctx, s, run, clusterID, clusterName, hostname.Hostname(), false, validate, touched, restoreErr)
+	t.acknowledgeFrom(ctx, s, run, clusterID, clusterName, hostname.Hostname(), false, nil, validate, touched, restoreErr)
 }
 
 // acknowledgeFrom writes the receipt of the node node of the cluster
-// clusterID, the one of the copy it holds when perNode.
-func (t *T) acknowledgeFrom(ctx context.Context, s backup.Store, run backup.Run, clusterID, clusterName, node string, perNode bool, validate func() (bool, []string), touched bool, restoreErr error) {
+// clusterID, the one of the copy it holds when perNode, skipped being the
+// shared heads of the run it left to the placement leader.
+func (t *T) acknowledgeFrom(ctx context.Context, s backup.Store, run backup.Run, clusterID, clusterName, node string, perNode bool, skipped []string, validate func() (bool, []string), touched bool, restoreErr error) {
 	if restoreErr != nil && !touched {
 		return
 	}
@@ -325,6 +361,7 @@ func (t *T) acknowledgeFrom(ctx context.Context, s backup.Store, run backup.Run,
 		ReplicaClusterName: clusterName,
 		Node:               node,
 		PerNode:            perNode,
+		SkippedHeads:       skipped,
 	}
 	if restoreErr != nil {
 		receipt.RestoreError = restoreErr.Error()

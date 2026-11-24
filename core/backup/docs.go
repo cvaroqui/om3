@@ -56,6 +56,14 @@ type (
 		// other nodes, and judged apart.
 		PerNode bool `json:"per_node,omitempty"`
 
+		// SkippedHeads are the members of the run the node did not
+		// restore: the heads of the resources flagged shared, one
+		// storage every node of the replica cluster reaches, which
+		// its placement leader alone restores. The copy of the node
+		// holds the run for its other heads, and its shared heads are
+		// as fresh as the freshest copy of its cluster skipping none.
+		SkippedHeads []string `json:"skipped_heads,omitempty"`
+
 		// Seq counts the receipts the replica wrote for the object,
 		// each one more than the one it replaces.
 		Seq uint64 `json:"seq"`

@@ -3,7 +3,9 @@ package ressyncstore
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,7 +35,10 @@ type followFixture struct {
 
 	applied  int
 	restored []string
-	now      time.Time
+
+	// members are the heads of the last restore.
+	members []string
+	now     time.Time
 }
 
 func newFollowFixture(t *testing.T) *followFixture {
@@ -62,8 +67,9 @@ func newFollowFixture(t *testing.T) *followFixture {
 			f.drift = nil
 			return nil, nil
 		},
-		restore: func(_ context.Context, run backup.Run) (bool, error) {
+		restore: func(_ context.Context, run backup.Run, members []string) (bool, error) {
 			f.restored = append(f.restored, run.ID)
+			f.members = append([]string{}, members...)
 			return true, nil
 		},
 	}
@@ -202,7 +208,7 @@ func TestFollowRestoreFailing(t *testing.T) {
 	ctx := context.Background()
 	f := newFollowFixture(t)
 	writeRun(t, f.s, prodID, "run1", f.now.Add(-time.Hour), "[DEFAULT]\n")
-	f.env.restore = func(context.Context, backup.Run) (bool, error) {
+	f.env.restore = func(context.Context, backup.Run, []string) (bool, error) {
 		return true, errors.New("no space left")
 	}
 	require.Error(t, f.r.followHeads(ctx, f.s, f.src, f.env))
@@ -409,4 +415,142 @@ func TestFlexReplicaFollowsAndIsJudgedPerNode(t *testing.T) {
 	for _, w := range v.warns {
 		assert.Contains(t, w, "replica drp/d2:")
 	}
+}
+
+// writeHeadsRun writes a completed run of the test object of the prod
+// cluster holding the heads rids, each a small tree.
+func writeHeadsRun(t *testing.T, s *storetar.T, id string, createdAt time.Time, rids ...string) backup.Run {
+	t.Helper()
+	ctx := context.Background()
+	src := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(src, "data"), []byte(id), 0600))
+	run := backup.Run{ID: id, Path: "ns1/svc/svc1", ObjectID: testOb, ClusterID: prodID, ClusterName: "prod", Node: "n1", CreatedAt: createdAt}
+	for _, rid := range rids {
+		require.NoError(t, s.Backup(ctx, run, rid, src, src, nil))
+	}
+	require.NoError(t, s.BackupStream(ctx, run, backup.MemberConfig, strings.NewReader("[DEFAULT]\nid = oid\n")))
+	require.NoError(t, s.Complete(ctx, run))
+	runs, err := s.Runs(ctx, backup.RunFilter{ID: id, Cluster: prodID})
+	require.NoError(t, err)
+	require.Len(t, runs, 1)
+	return runs[0]
+}
+
+// flexNode is a node of a flex replica of two nodes, whose fs#2 is flagged
+// shared, leading the placement or not.
+func flexNode(t *testing.T, s *storetar.T, node string, leader bool) *followFixture {
+	t.Helper()
+	f := newFollowFixture(t)
+	if s != nil {
+		f.s = s
+	}
+	f.env.node = node
+	f.env.perNode = true
+	f.env.multiNode = true
+	f.env.heads = func(run backup.Run) []followHead {
+		return []followHead{{rid: "fs#1", dir: "/srv/local"}, {rid: "fs#2", dir: "/srv/shared", shared: true}}
+	}
+	f.env.leader = func(context.Context) (bool, error) { return leader, nil }
+	f.env.fsType = func(dir string) string {
+		if dir == "/srv/shared" {
+			return "nfs4"
+		}
+		return "xfs"
+	}
+	return f
+}
+
+// A head flagged shared is one storage the nodes of a flex replica all
+// reach: its placement leader alone restores it, the other nodes restore
+// their own heads and say which they skipped. The source dates the shared
+// heads of a node by the freshest copy of its cluster skipping none, so a
+// node ahead of its leader is not said to hold what no node restored.
+func TestFlexReplicaSharedHeadIsRestoredByTheLeaderOnly(t *testing.T) {
+	ctx := context.Background()
+	t0 := time.Date(2026, 10, 20, 2, 0, 0, 0, time.UTC)
+	d1 := flexNode(t, nil, "d1", true)
+	d2 := flexNode(t, d1.s, "d2", false)
+	run1 := writeHeadsRun(t, d1.s, "run1", t0, "fs#1", "fs#2")
+
+	require.NoError(t, d2.r.followHeads(ctx, d2.s, d2.src, d2.env))
+	assert.Equal(t, []string{"fs#1"}, d2.members, "the shared head is the leader's to restore")
+	hour := func(time.Time) time.Duration { return time.Hour }
+	digestOf := func(run backup.Run) (string, error) {
+		b, err := backup.ReadMember(ctx, d1.s, run, backup.MemberConfig)
+		if err != nil {
+			return "", err
+		}
+		return backup.ConfigDigest(b)
+	}
+	judge := func(now time.Time, runs ...backup.Run) replicaVerdict {
+		receipts, err := backup.ReadReceipts(ctx, d1.s, prodID, testOb)
+		require.NoError(t, err)
+		return judgeReplicas(now, receipts, runs, hour, digestOf)
+	}
+
+	// The leader did not follow yet: no node holds the shared head.
+	v := judge(t0.Add(10*time.Minute), run1)
+	require.Len(t, v.replicas, 1)
+	assert.Equal(t, []string{"fs#2"}, v.replicas[0].SkippedHeads)
+	assert.True(t, v.replicas[0].RPOBreachedAt.Equal(noCopyRPOBreach))
+	require.NotEmpty(t, v.warns)
+	assert.Contains(t, v.warns[0], "replica drp/d2: holds run run1 without fs#2, shared heads no node of its cluster restored")
+
+	require.NoError(t, d1.r.followHeads(ctx, d1.s, d1.src, d1.env))
+	assert.Equal(t, []string{"fs#1", "fs#2"}, d1.members, "the leader restores every head")
+	v = judge(t0.Add(10*time.Minute), run1)
+	require.Len(t, v.replicas, 2)
+	assert.Empty(t, v.warns)
+	assert.Empty(t, v.replicas[0].SkippedHeads)
+	assert.True(t, v.replicas[1].RPOBreachedAt.Equal(t0.Add(time.Hour)))
+
+	// d2 follows the next run ahead of its leader: its shared head is
+	// the one of run1 still, which dates its copy.
+	run2 := writeHeadsRun(t, d1.s, "run2", t0.Add(50*time.Minute), "fs#1", "fs#2")
+	require.NoError(t, d2.r.followHeads(ctx, d2.s, d2.src, d2.env))
+	v = judge(t0.Add(55*time.Minute), run1, run2)
+	require.Len(t, v.replicas, 2)
+	assert.Equal(t, "run2", v.replicas[1].RunID)
+	assert.True(t, v.replicas[1].RPOBreachedAt.Equal(t0.Add(time.Hour)), "as old as its shared head")
+
+	require.NoError(t, d1.r.followHeads(ctx, d1.s, d1.src, d1.env))
+	v = judge(t0.Add(55*time.Minute), run1, run2)
+	assert.True(t, v.replicas[1].RPOBreachedAt.Equal(t0.Add(110*time.Minute)))
+
+	// A node that can not tell the leader leaves the shared heads to it.
+	d3 := flexNode(t, d1.s, "d3", true)
+	d3.env.leader = func(context.Context) (bool, error) { return false, errors.New("daemon down") }
+	require.NoError(t, d3.r.followHeads(ctx, d3.s, d3.src, d3.env))
+	assert.Equal(t, []string{"fs#1"}, d3.members)
+}
+
+// A head on a filesystem several nodes mount at once, not flagged shared,
+// would be restored by every node of a flex replica: the follow refuses it
+// before anything is written, naming the keyword to set, and writes no
+// receipt. A replica of one node, or a failover one, has one node restoring.
+func TestFlexReplicaRefusesAnUnmarkedHeadOnASharedFilesystem(t *testing.T) {
+	ctx := context.Background()
+	f := flexNode(t, nil, "d1", true)
+	f.env.heads = func(run backup.Run) []followHead {
+		return []followHead{{rid: "fs#1", dir: "/srv/local"}, {rid: "fs#2", dir: "/srv/shared"}}
+	}
+	writeHeadsRun(t, f.s, "run1", f.now.Add(-time.Hour), "fs#1", "fs#2")
+	err := f.r.followHeads(ctx, f.s, f.src, f.env)
+	require.ErrorContains(t, err, "fs#2 (/srv/shared, nfs4)")
+	assert.ErrorContains(t, err, "shared = true")
+	assert.Empty(t, f.restored, "nothing is written")
+	_, ok := f.receipt(t)
+	assert.False(t, ok, "a refusal before a head is touched writes no receipt")
+	assert.Empty(t, loadFollowRecord(f.env.file).RunID)
+
+	f.env.multiNode = false
+	require.NoError(t, f.r.followHeads(ctx, f.s, f.src, f.env))
+	assert.Equal(t, []string{"fs#1", "fs#2"}, f.members)
+
+	g := flexNode(t, nil, "d1", false)
+	g.env.perNode = false
+	g.env.heads = f.env.heads
+	writeHeadsRun(t, g.s, "run1", g.now.Add(-time.Hour), "fs#1", "fs#2")
+	require.NoError(t, g.r.followHeads(ctx, g.s, g.src, g.env))
+	assert.Equal(t, []string{"fs#1", "fs#2"}, g.members, "the leader of a failover replica restores every head")
 }
